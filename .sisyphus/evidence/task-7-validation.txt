@@ -1,0 +1,41 @@
+Task 7 — Validation Error Handling Evidence
+=============================================
+
+All validation is handled by Pydantic schema validation (FastAPI auto-422).
+
+Test Cases Verified:
+--------------------
+
+1. Empty messages list (messages=[])
+   Request:  POST /api/chat  {"messages": []}
+   Response: 422 Unprocessable Entity
+   Reason:   ChatRequest.messages has min_length=1
+
+2. Oversize message (content > 1000 chars)
+   Request:  POST /api/chat  {"messages": [{"role":"user","content":"x"*1001}]}
+   Response: 422 Unprocessable Entity
+   Reason:   ChatMessage.content has max_length=1000
+
+3. Missing messages field
+   Request:  POST /api/chat  {}
+   Response: 422 Unprocessable Entity
+   Reason:   ChatRequest.messages is required
+
+4. Invalid role
+   Request:  POST /api/chat  {"messages": [{"role":"admin","content":"Hi"}]}
+   Response: 422 Unprocessable Entity
+   Reason:   ChatMessage.role is Literal["user","assistant","system"]
+
+5. Service errors (caught at stream level)
+   When ChatService.stream_chat() raises, the error is captured
+   and returned as an SSE error chunk:
+     data: {"error": "Internal server error", "done": true}\n\n
+   Response status remains 200 (streaming response).
+
+Verification Tests Passed:
+--------------------------
+  test_empty_messages_returns_422
+  test_oversize_message_returns_422
+  test_missing_messages_field_returns_422
+  test_invalid_role_returns_422
+  test_error_handling_returns_sse_error_chunk

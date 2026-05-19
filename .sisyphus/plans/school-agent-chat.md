@@ -424,7 +424,7 @@ Wave FINAL (4 parallel reviews):
 
 ---
 
-- [ ] 5. 后端配置 + Pydantic 数据模型（TDD）
+- [x] 5. 后端配置 + Pydantic 数据模型（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
@@ -503,7 +503,7 @@ Wave FINAL (4 parallel reviews):
 
 ---
 
-- [ ] 6. 后端 LLM 服务 + LangGraph Graph（TDD）
+- [x] 6. 后端 LLM 服务 + LangGraph Graph（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
@@ -601,7 +601,7 @@ print('Graph compiled:', type(graph).__name__)
 
 ---
 
-- [ ] 7. 后端 SSE 流式 API 端点（TDD）
+- [x] 7. 后端 SSE 流式 API 端点（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
