@@ -47,7 +47,7 @@ cd backend && pip install -r requirements.txt
 
 ```bash
 # Copy environment template and set your API key
-cp .env.example .env
+cd backend && cp .env.example .env
 # Edit .env: set DEEPSEEK_API_KEY=your_key_here
 ```
 

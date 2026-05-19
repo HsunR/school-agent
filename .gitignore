@@ -38,6 +38,13 @@ Desktop.ini
 .env.local
 .env.*.local
 
+# OpenCode internal tracking
+.sisyphus/
+
+# Auto-generated
+next-env.d.ts
+frontend/next-env.d.ts
+
 # Project specific
 *.db
 *.sqlite3
