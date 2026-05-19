@@ -1,0 +1,78 @@
+"""Tests for the RAG-enabled LangGraph pipeline."""
+
+from unittest.mock import MagicMock
+
+import pytest
+from langchain_core.messages import HumanMessage, AIMessage
+
+from app.graph.graph import (
+    ChatState,
+    routing_node,
+    should_retrieve,
+    END,
+)
+
+
+def test_routing_node_parses_json():
+    llm = MagicMock()
+    llm.invoke.return_value = AIMessage(
+        content='{"search_manual": true, "search_forum": false}'
+    )
+    state: ChatState = {
+        "messages": [HumanMessage(content="What are the dorm rules?")],
+        "search_manual": False,
+        "search_forum": False,
+        "manual_chunks": [],
+        "forum_chunks": [],
+    }
+    result = routing_node(state, llm)
+    assert result["search_manual"] is True
+    assert result["search_forum"] is False
+
+
+def test_routing_node_fallback_on_bad_json():
+    llm = MagicMock()
+    llm.invoke.return_value = AIMessage(content="not json")
+    state: ChatState = {
+        "messages": [HumanMessage(content="hi")],
+        "search_manual": False,
+        "search_forum": False,
+        "manual_chunks": [],
+        "forum_chunks": [],
+    }
+    result = routing_node(state, llm)
+    assert result["search_manual"] is False
+    assert result["search_forum"] is False
+
+
+def test_should_retrieve_manual_first():
+    state: ChatState = {
+        "messages": [],
+        "search_manual": True,
+        "search_forum": False,
+        "manual_chunks": [],
+        "forum_chunks": [],
+    }
+    assert should_retrieve(state) == "manual_retrieval_node"
+
+
+def test_should_retrieve_forum_after_manual():
+    state: ChatState = {
+        "messages": [],
+        "search_manual": False,
+        "search_forum": True,
+        "manual_chunks": [],
+        "forum_chunks": [],
+    }
+    assert should_retrieve(state) == "forum_retrieval_node"
+
+
+def test_should_retrieve_end_when_no_search():
+    state: ChatState = {
+        "messages": [],
+        "search_manual": False,
+        "search_forum": False,
+        "manual_chunks": [],
+        "forum_chunks": [],
+    }
+    assert should_retrieve(state) == END
