@@ -919,6 +919,7 @@ export default function AdminPage() {
                   value={delimiter}
                   onChange={(e) => setDelimiter(e.target.value)}
                   className="w-full rounded-xl border border-gray-300 bg-white p-2.5 text-sm font-mono text-gray-900 transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  style={{ fontVariantLigatures: "none" }}
                 />
               </div>
             </div>
