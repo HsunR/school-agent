@@ -1,0 +1,16 @@
+Task 4: API Contract & Message Type Definitions
+Status: COMPLETED
+Created: docs/api.md
+Date: 2026-05-18
+
+Deliverables:
+- docs/api.md - Full API contract specification covering:
+  ? POST /api/chat endpoint
+  ? Request format (JSON with messages array)
+  ? Response format (SSE with data: chunks)
+  ? Error status codes (400, 422, 500)
+  ? SSE stream characteristics and client integration guide
+  ? Multi-turn conversation example
+  ? Environment variables reference
+  ? CORS configuration
+  ? Error handling strategy table

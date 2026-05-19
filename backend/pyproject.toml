@@ -1,0 +1,14 @@
+[project]
+name = "school-agent-backend"
+version = "0.1.0"
+description = "AI-powered educational assistant backend service"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

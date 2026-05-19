@@ -1,0 +1,43 @@
+# Node.js
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+.eslintcache
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Project specific
+*.db
+*.sqlite3
