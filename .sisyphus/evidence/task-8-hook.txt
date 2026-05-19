@@ -1,0 +1,36 @@
+Task 8: Frontend Chat API Hook + SSE Client
+============================================
+Date: 2026-05-19
+
+## Files Created/Modified
+
+1. frontend/src/types/chat.ts (modified)
+   - Added SSEPayload interface { token, done, error? }
+
+2. frontend/src/hooks/useChat.ts (created)
+   - useChat() hook returning { messages, isLoading, error, sendMessage, clearMessages, clearError }
+   - sendMessage: validates non-empty and ≤1000 chars, POSTs to /api/chat with SSE streaming
+   - Uses fetch + ReadableStream.getReader() for SSE parsing
+   - Uses useCallback + useRef for stable references and stale closure prevention
+   - clearMessages and clearError utilities
+
+3. frontend/src/__tests__/hooks/useChat.test.ts (created)
+   - 9 tests covering all requirements
+
+## Test Results (all passing)
+✓ POST messages to /api/chat when sendMessage is called
+✓ accumulate streaming tokens in the assistant message
+✓ set isStreaming to false when done is received
+✓ reject empty messages
+✓ reject messages over 1000 characters
+✓ set error state when fetch fails
+✓ prevent sending while isLoading
+✓ clear messages with clearMessages
+✓ clear error with clearError
+
+## Design Decisions
+- Used refs (isLoadingRef, messagesRef) for stable useCallback dependencies
+- Functional updates for setMessages to avoid stale closures during streaming
+- SSE parsing: splits on \n\n, handles partial chunks with buffer
+- Uses fetch() + ReadableStream.getReader() instead of EventSource API
+- No state management libraries (zustand, redux) or persistence

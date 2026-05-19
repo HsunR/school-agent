@@ -9,7 +9,7 @@ Tests cover:
 from typing import TypedDict, Annotated, Sequence
 
 import pytest
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, AIMessageChunk
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, AIMessageChunk, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatGenerationChunk, ChatGeneration, ChatResult
 from langgraph.graph import START, END
@@ -137,3 +137,61 @@ class TestGraphInvocation:
         assert isinstance(result, dict)
         assert "messages" in result
         assert len(result["messages"]) == 2
+
+    def test_invoke_with_system_message(self):
+        """Graph should work with system + user messages."""
+        llm = MockStreamingChatModel()
+        graph = compile_graph(llm)
+        result = graph.invoke({
+            "messages": [
+                SystemMessage(content="Be concise"),
+                HumanMessage(content="test"),
+            ],
+        })
+        assert len(result["messages"]) == 3
+        assert result["messages"][0].content == "Be concise"
+        assert result["messages"][1].content == "test"
+        assert result["messages"][2].content == "Hello World!"
+
+    @pytest.mark.asyncio
+    async def test_astream_events_yields_token_events(self):
+        """astream_events should yield on_chat_model_stream events."""
+        llm = MockStreamingChatModel()
+        graph = compile_graph(llm)
+
+        events = []
+        async for event in graph.astream_events(
+            {"messages": [HumanMessage(content="test")]},
+            version="v2",
+        ):
+            events.append(event)
+
+        stream_events = [
+            e for e in events if e.get("event") == "on_chat_model_stream"
+        ]
+        assert len(stream_events) > 0
+
+        # Check the first stream event has a token
+        first = stream_events[0]
+        chunk = first.get("data", {}).get("chunk")
+        assert chunk is not None
+        assert chunk.content
+
+    def test_conversation_context_preserved(self):
+        """Graph should preserve prior conversation context."""
+        llm = MockStreamingChatModel()
+        graph = compile_graph(llm)
+
+        # First turn
+        result1 = graph.invoke({
+            "messages": [HumanMessage(content="First message")],
+        })
+        assert len(result1["messages"]) == 2
+
+        # Second turn — pass full history
+        result2 = graph.invoke({
+            "messages": result1["messages"] + [HumanMessage(content="Second message")],
+        })
+        assert len(result2["messages"]) == 4
+        assert result2["messages"][0].content == "First message"
+        assert result2["messages"][2].content == "Second message"

@@ -5,17 +5,7 @@ from collections.abc import AsyncGenerator
 from unittest.mock import MagicMock, patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
-
-
-@pytest.fixture
-async def client() -> AsyncClient:
-    """Create an async test client for the FastAPI app."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+from httpx import AsyncClient
 
 
 async def _async_gen(tokens: list[str]) -> AsyncGenerator[str, None]:
@@ -199,3 +189,79 @@ async def test_chat_root(client: AsyncClient) -> None:
     response = await client.get("/api/chat")
     assert response.status_code == 200
     assert response.json() == {"message": "Chat API placeholder"}
+
+
+# ---------------------------------------------------------------------------
+# Integration test with mocked ChatService
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_integration_mocked_service_sse_flow(
+    client: AsyncClient,
+    mock_chat_service: MagicMock,
+) -> None:
+    """Integration test: mock ChatService, verify SSE flow end-to-end.
+
+    Uses the ``mock_chat_service`` fixture to replace the module-level
+    ``chat_service`` singleton and checks that every SSE chunk is correctly
+    formatted.
+    """
+    tokens = ["Hello", " ", "World"]  # fmt: skip
+    # Replace stream_chat with a plain callable that returns the async
+    # generator.  We cannot use AsyncMock for this because AsyncMock wraps
+    # return values in a coroutine, which breaks ``async for``.
+    mock_chat_service.stream_chat = lambda _msgs: _async_gen(tokens)  # noqa: E731
+
+    with patch("app.api.chat.chat_service", mock_chat_service):
+        response = await client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+
+    chunks = [c for c in response.text.strip().split("\n\n") if c]
+    assert len(chunks) == len(tokens) + 1  # token chunks + final done
+
+    # Verify token chunks
+    for i, chunk in enumerate(chunks[:-1]):
+        payload = json.loads(chunk.removeprefix("data: "))
+        assert payload["token"] == tokens[i]
+        assert payload["done"] is False
+
+    # Verify final done chunk
+    last_payload = json.loads(chunks[-1].removeprefix("data: "))
+    assert last_payload == {"token": "", "done": True}
+
+
+@pytest.mark.asyncio
+async def test_integration_mocked_service_error(
+    client: AsyncClient,
+    mock_chat_service: MagicMock,
+) -> None:
+    """Integration test: service exception yields SSE error chunk.
+
+    Verifies that when ``stream_chat`` raises an exception, the endpoint
+    returns 200 with an SSE error chunk containing the error message and
+    ``done: true``.
+    """
+    async def _error_stream(_messages):  # noqa: ANN202
+        raise RuntimeError("LLM failure")
+        yield  # pragma: no cover — makes this an async generator
+
+    mock_chat_service.stream_chat = _error_stream  # noqa: E731
+
+    with patch("app.api.chat.chat_service", mock_chat_service):
+        response = await client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+
+    assert response.status_code == 200
+    chunks = [c for c in response.text.strip().split("\n\n") if c]
+    assert len(chunks) >= 1
+    payload = json.loads(chunks[-1].removeprefix("data: "))
+    assert "error" in payload
+    assert payload["done"] is True

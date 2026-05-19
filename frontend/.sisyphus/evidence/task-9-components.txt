@@ -1,0 +1,46 @@
+Task 9: ChatInput + ChatMessage Components (TDD) — EVIDENCE
+============================================================
+
+Date: 2026-05-19
+
+## Files Created
+
+### Components
+- src/components/ChatInput.tsx — Chat input with textarea, send button, char counter, Enter/Shift+Enter
+- src/components/ChatMessage.tsx — Chat message bubble with role labels, markdown, streaming cursor, timestamp
+
+### Supporting
+- src/types/chat.ts — ChatMessage interface definition
+- src/components/MarkdownRenderer.tsx — Markdown rendering (dependency for ChatMessage)
+
+### Tests
+- src/__tests__/components/ChatInput.test.tsx — 8 tests
+- src/__tests__/components/ChatMessage.test.tsx — 8 tests
+
+## Test Results
+
+All 16 tests passing:
+
+### ChatInput (8/8)
+✓ renders textarea and send button
+✓ button is disabled when input is empty
+✓ button is enabled when input has text
+✓ input and button are disabled when isLoading is true
+✓ calls onSend with input text on button click
+✓ calls onSend on Enter key (without Shift)
+✓ does not call onSend on Shift+Enter
+✓ shows character count correctly
+
+### ChatMessage (8/8)
+✓ renders user message with right alignment
+✓ renders assistant message with left alignment
+✓ shows 'You' label for user messages
+✓ shows 'AI' label for assistant messages
+✓ renders assistant message content via markdown
+✓ shows blinking cursor when isStreaming is true
+✓ does not show blinking cursor when isStreaming is false
+✓ shows timestamp in HH:MM format
+
+## Verification
+- TypeScript compilation: clean (npx tsc --noEmit)
+- Tests: 16/16 passed (npx vitest run)

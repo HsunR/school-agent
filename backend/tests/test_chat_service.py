@@ -233,3 +233,62 @@ class TestErrorHandling:
 
         # Should have yielded partial token before error
         assert "".join(tokens) == "partial"
+
+
+class TestTimeout:
+    """Timeout configuration handling in ChatService."""
+
+    @pytest.mark.asyncio
+    async def test_timeout_passed_to_chatopenai(self):
+        """The llm_timeout setting should be forwarded to ChatOpenAI."""
+        settings = Settings(llm_timeout=15)
+        with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
+            ChatService(settings)
+            mock_llm_cls.assert_called_once()
+            _call_kwargs = mock_llm_cls.call_args.kwargs
+            assert _call_kwargs.get("timeout") == 15
+
+    @pytest.mark.asyncio
+    async def test_default_timeout_is_30(self):
+        """Default llm_timeout should be 30."""
+        with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
+            service = ChatService(Settings())
+            mock_llm_cls.assert_called_once()
+            _call_kwargs = mock_llm_cls.call_args.kwargs
+            assert _call_kwargs.get("timeout") == 30
+
+    @pytest.mark.asyncio
+    async def test_custom_timeout_value(self):
+        """Custom timeout value should propagate correctly."""
+        settings = Settings(llm_timeout=60)
+        with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
+            ChatService(settings)
+            mock_llm_cls.assert_called_once()
+            _call_kwargs = mock_llm_cls.call_args.kwargs
+            assert _call_kwargs.get("timeout") == 60
+
+    @pytest.mark.asyncio
+    async def test_stream_chat_with_simulated_timeout(self):
+        """Simulate a timeout by having the graph sleep then raise.
+
+        The service should re-raise the timeout exception so the caller
+        can handle it appropriately.
+        """
+        settings = Settings(llm_timeout=1)
+        with patch("app.services.chat_service.ChatOpenAI"):
+            service = ChatService(settings)
+
+        async def mock_astream_events(*args, **kwargs):
+            import asyncio
+
+            await asyncio.sleep(0.01)  # simulate brief work
+            raise TimeoutError("LLM timed out")
+            yield  # pragma: no cover
+
+        service.graph.astream_events = mock_astream_events
+
+        with pytest.raises(TimeoutError, match="LLM timed out"):
+            async for _ in service.stream_chat(
+                [ChatMessage(role="user", content="test")]
+            ):
+                pass  # pragma: no cover

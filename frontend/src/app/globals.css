@@ -24,3 +24,104 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Custom scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #d1d5db;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* ── Markdown prose styles for chat bubbles ── */
+.prose {
+  line-height: 1.6;
+}
+
+.prose p {
+  margin-bottom: 0.5rem;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose ul,
+.prose ol {
+  margin-bottom: 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.prose ul:last-child,
+.prose ol:last-child {
+  margin-bottom: 0;
+}
+
+.prose li {
+  margin-bottom: 0.25rem;
+}
+
+.prose li:last-child {
+  margin-bottom: 0;
+}
+
+.prose code {
+  font-size: 0.8125rem;
+}
+
+.prose pre {
+  margin-bottom: 0.5rem;
+}
+
+.prose pre:last-child {
+  margin-bottom: 0;
+}
+
+.prose blockquote {
+  margin-bottom: 0.5rem;
+}
+
+.prose blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose h1:first-child,
+.prose h2:first-child,
+.prose h3:first-child,
+.prose h4:first-child {
+  margin-top: 0;
+}
+
+/* ── Blinking cursor animation ── */
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 0;
+  }
+  51%,
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-cursor-blink {
+  animation: blink 0.8s step-end infinite;
+}

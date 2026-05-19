@@ -685,7 +685,7 @@ print('Graph compiled:', type(graph).__name__)
 
 ---
 
-- [ ] 8. 前端 Chat API Hook + SSE 客户端（TDD）
+- [x] 8. 前端 Chat API Hook + SSE 客户端（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
@@ -777,7 +777,7 @@ console.log('Type check passed:', msg.content);
 
 ---
 
-- [ ] 9. 前端 ChatInput + ChatMessage 组件（TDD）
+- [x] 9. 前端 ChatInput + ChatMessage 组件（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
@@ -842,7 +842,7 @@ console.log('Type check passed:', msg.content);
 
 ---
 
-- [ ] 10. 前端 MarkdownRenderer 组件（TDD）
+- [x] 10. 前端 MarkdownRenderer 组件（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
@@ -899,7 +899,7 @@ console.log('Type check passed:', msg.content);
 
 ---
 
-- [ ] 11. 前端主页面集成（TDD）
+- [x] 11. 前端主页面集成（TDD）
 
   **What to do**:
   - **RED**: 先写测试：
@@ -975,7 +975,7 @@ console.log('Type check passed:', msg.content);
 
 ---
 
-- [ ] 12. 后端完整测试套件（pytest）
+- [x] 12. 后端完整测试套件（pytest）
 
   **What to do**:
   - 完善 `tests/test_chat_api.py`：
@@ -1026,7 +1026,7 @@ console.log('Type check passed:', msg.content);
 
 ---
 
-- [ ] 13. 前端完整测试套件（Vitest）
+- [x] 13. 前端完整测试套件（Vitest）
 
   **What to do**:
   - 完善 `frontend/src/__tests__/hooks/useChat.test.ts`：
@@ -1082,7 +1082,7 @@ console.log('Type check passed:', msg.content);
 
 ---
 
-- [ ] 14. Next.js 代理配置 + 集成联调
+- [x] 14. Next.js 代理配置 + 集成联调
 
   **What to do**:
   - `frontend/next.config.ts`：
