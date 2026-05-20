@@ -296,7 +296,7 @@ export default function AdminPage() {
   // ── Form state ──
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<Category>("student_manual");
-  const [delimiter, setDelimiter] = useState("*****SPILIT_BY_HUSNR*****");
+  const [delimiter, setDelimiter] = useState("-----SPILIT_BY_HSUNR-----");
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
 
