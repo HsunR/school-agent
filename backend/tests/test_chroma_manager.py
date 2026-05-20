@@ -96,3 +96,38 @@ def test_stats_counts(settings, mock_chroma):
     result = manager.stats(COLLECTION)
 
     assert result["total_count"] == 42
+
+
+def test_delete_by_id_deletes_existing_docs(settings, mock_chroma):
+    """Delete existing documents by their IDs."""
+    _, mock_collection = mock_chroma
+    mock_collection.get.return_value = {"ids": ["hash1", "hash2"]}
+
+    manager = ChromaManager(settings, MagicMock())
+    count = manager.delete_by_id(COLLECTION, ["hash1", "hash2"])
+
+    assert count == 2
+    mock_collection.delete.assert_called_once_with(ids=["hash1", "hash2"])
+
+
+def test_delete_by_id_skips_nonexistent(settings, mock_chroma):
+    """Deleting non-existent IDs returns 0 and does not call delete."""
+    _, mock_collection = mock_chroma
+    mock_collection.get.return_value = {"ids": []}
+
+    manager = ChromaManager(settings, MagicMock())
+    count = manager.delete_by_id(COLLECTION, ["nonexistent_hash"])
+
+    assert count == 0
+    mock_collection.delete.assert_not_called()
+
+
+def test_delete_by_id_empty_list_returns_zero(settings, mock_chroma):
+    """Passing an empty list returns 0 without calling ChromaDB."""
+    _, mock_collection = mock_chroma
+
+    manager = ChromaManager(settings, MagicMock())
+    count = manager.delete_by_id(COLLECTION, [])
+
+    assert count == 0
+    mock_collection.delete.assert_not_called()

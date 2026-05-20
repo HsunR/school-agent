@@ -11,6 +11,7 @@ from app.rag.embeddings import EmbeddingClient
 from app.schemas.admin import (
     ClearResponse,
     DataPreviewResponse,
+    DeleteResponse,
     StatsResponse,
     UploadRequest,
     UploadResponse,
@@ -72,18 +73,26 @@ async def preview_data(
     )
 
 
-@router.delete("/data", response_model=ClearResponse)
-async def clear_data(
-    category: Optional[str] = Query(default=None),
-) -> ClearResponse:
-    """Clear one or all knowledge base collections."""
-    if category and category not in ALL_COLLECTIONS:
+@router.delete("/data", response_model=ClearResponse | DeleteResponse)
+async def delete_data(
+    category: str = Query(...),
+    id: Optional[str] = Query(default=None),
+) -> ClearResponse | DeleteResponse:
+    """Delete specific document(s) from a knowledge base collection.
+
+    * If ``id`` is provided — delete that single document.
+    * If ``id`` is omitted — delete all documents in the category.
+    """
+    if category not in ALL_COLLECTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid category: {category}")
 
     chroma = _get_chroma()
-    chroma.clear(category)
-    cleared = [category] if category else ALL_COLLECTIONS
-    return ClearResponse(cleared=cleared)
+    if id is not None:
+        count = chroma.delete_by_id(category, [id])
+        return DeleteResponse(deleted=count)
+    else:
+        chroma.clear(category)
+        return ClearResponse(cleared=[category])
 
 
 @router.get("/stats", response_model=list[StatsResponse])

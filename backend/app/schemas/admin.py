@@ -42,6 +42,11 @@ class StatsResponse(BaseModel):
     total_count: int
 
 
+class DeleteResponse(BaseModel):
+    """Response after deleting specific documents."""
+
+    deleted: int
+
 class ClearResponse(BaseModel):
     """Response after clearing a collection."""
 

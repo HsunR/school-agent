@@ -73,12 +73,19 @@ async def test_stats_endpoint_returns_list(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_clear_all_returns_cleared_list(client: AsyncClient) -> None:
-    """Test that clearing all returns both collection names."""
-    resp = await client.delete("/api/admin/data")
+async def test_clear_category_returns_cleared(client: AsyncClient) -> None:
+    """Test that clearing a specific category returns that category."""
+    resp = await client.delete("/api/admin/data?category=student_manual")
     if resp.status_code == 200:
         data = resp.json()
-        assert len(data["cleared"]) == len(ALL_COLLECTIONS)
+        assert data["cleared"] == ["student_manual"]
+
+
+@pytest.mark.asyncio
+async def test_clear_missing_category_returns_422(client: AsyncClient) -> None:
+    """Test that omitting category on DELETE returns 422."""
+    resp = await client.delete("/api/admin/data")
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -86,3 +93,28 @@ async def test_clear_invalid_category_returns_400(client: AsyncClient) -> None:
     """Test that clearing an invalid category returns 400."""
     resp = await client.delete("/api/admin/data?category=invalid")
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_delete_single_record_missing_category_returns_422(client: AsyncClient) -> None:
+    """Test that deleting a record without category returns 422."""
+    resp = await client.delete("/api/admin/data?id=somehash")
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_single_record_invalid_category_returns_400(client: AsyncClient) -> None:
+    """Test that deleting with invalid category returns 400."""
+    resp = await client.delete("/api/admin/data?category=invalid&id=somehash")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_record_returns_zero(client: AsyncClient) -> None:
+    """Test that deleting a non-existent ID returns deleted=0 (not an error)."""
+    resp = await client.delete(
+        "/api/admin/data?category=student_manual&id=nonexistent_hash"
+    )
+    if resp.status_code == 200:
+        data = resp.json()
+        assert data["deleted"] == 0

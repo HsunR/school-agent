@@ -143,6 +143,28 @@ class ChromaManager:
             "total": total,
         }
 
+    def delete_by_id(self, category: str, ids: list[str]) -> int:
+        """Delete specific documents from a collection by their IDs.
+
+        Args:
+            category: Collection name.
+            ids: List of document IDs (SHA256 hashes) to delete.
+
+        Returns:
+            Number of documents deleted.
+        """
+        if not ids:
+            return 0
+        collection = self._collection(category)
+        # Verify IDs exist before deletion
+        existing = collection.get(ids=ids)
+        existing_ids = existing.get("ids", []) or []
+        if not existing_ids:
+            return 0
+        collection.delete(ids=existing_ids)
+        logger.info("Deleted %d docs from '%s'", len(existing_ids), category)
+        return len(existing_ids)
+
     def clear(self, category: str | None = None) -> None:
         """Delete all data from one or both collections.
 
