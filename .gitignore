@@ -41,6 +41,9 @@ Desktop.ini
 # OpenCode internal tracking
 .sisyphus/
 
+# Design docs & plans
+docs/superpowers/
+
 # Auto-generated
 next-env.d.ts
 frontend/next-env.d.ts
