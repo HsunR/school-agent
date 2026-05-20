@@ -2,6 +2,12 @@
 
 import asyncio
 
+# Load .env into os.environ BEFORE any other imports
+# so LangSmith SDK can detect LANGSMITH_TRACING etc.
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Apply WindowsSelectorEventLoopPolicy on Windows for SSE compatibility
 if __name__ == "__main__":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

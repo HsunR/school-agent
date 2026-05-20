@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     llm_timeout: int = 30
     app_name: str = "School Agent Backend"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 @lru_cache
