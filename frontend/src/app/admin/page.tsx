@@ -869,10 +869,7 @@ export default function AdminPage() {
           {/* Tabs */}
           <div className="flex border-b border-gray-200">
             <button
-              onClick={() => {
-                setInputMode("paste");
-                setFileName("");
-              }}
+              onClick={() => setInputMode("paste")}
               className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-colors ${
                 inputMode === "paste"
                   ? "border-b-2 border-blue-500 bg-white text-blue-600"
@@ -1024,13 +1021,41 @@ export default function AdminPage() {
                     <label className="mb-1 block text-xs font-medium text-gray-500">
                       文件内容预览（可编辑）
                     </label>
-                    <textarea
-                      value={deferredContent}
-                      onChange={(e) => setContent(e.target.value)}
-                      rows={5}
-                      className="w-full rounded-xl border border-gray-300 bg-gray-50 p-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      placeholder="选择文件后将自动填充内容..."
-                    />
+                    {isContentLarge && !showFullEditor ? (
+                      <div className="space-y-3">
+                        <textarea
+                          value={deferredContent.slice(0, MAX_EDITOR_CHARS) + `\n\n... [内容过长，仅显示前 ${MAX_EDITOR_CHARS} 字符，共 ${content.length} 字符]`}
+                          readOnly
+                          rows={5}
+                          className="w-full rounded-xl border border-gray-300 bg-gray-100 p-3 text-sm text-gray-500 transition-colors"
+                          placeholder="选择文件后将自动填充内容..."
+                        />
+                        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                          <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                          <span className="flex-1">内容较大，暂只可预览前 {MAX_EDITOR_CHARS} 字符</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setContent(fullContentRef.current || content);
+                              setShowFullEditor(true);
+                            }}
+                            className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                          >
+                            加载全部内容编辑
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <textarea
+                        value={deferredContent}
+                        onChange={(e) => setContent(e.target.value)}
+                        rows={5}
+                        className="w-full rounded-xl border border-gray-300 bg-gray-50 p-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        placeholder="选择文件后将自动填充内容..."
+                      />
+                    )}
                   </div>
                 )}
               </div>
