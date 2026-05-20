@@ -31,7 +31,8 @@ class ChromaManager:
 
     def __init__(self, settings: Settings, embedding_client: EmbeddingClient) -> None:
         self.persist_dir = settings.chroma_persist_dir
-        self.top_k = settings.rag_top_k
+        self.top_k_manual = settings.rag_top_k_manual
+        self.top_k_forum = settings.rag_top_k_forum
         self.embedding_client = embedding_client
         self._client = chromadb.PersistentClient(path=self.persist_dir)
 
@@ -110,9 +111,10 @@ class ChromaManager:
         """
         collection = self._collection(category)
         query_embedding = self.embedding_client.embed([query])[0]
+        n_results = self.top_k_manual if category == "student_manual" else self.top_k_forum
         results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=self.top_k,
+            n_results=n_results,
         )
         documents = results.get("documents", [[]])[0] or []
         return list(documents)
