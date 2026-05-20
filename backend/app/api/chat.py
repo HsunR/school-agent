@@ -12,6 +12,8 @@ from app.core.settings import get_settings
 from app.schemas.chat import ChatRequest
 from app.services.chat_service import ChatService
 
+from langsmith import traceable
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -43,7 +45,7 @@ async def event_generator(
         logger.exception("Error during SSE stream")
         yield f"data: {json.dumps({'error': 'Internal server error', 'done': True})}\n\n"
 
-
+@traceable(name="chat_endpoint")
 @router.post("")
 async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
     """Stream a chat response via Server-Sent Events.
