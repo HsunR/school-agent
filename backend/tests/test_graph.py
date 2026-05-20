@@ -7,6 +7,7 @@ Tests cover:
 """
 
 from typing import TypedDict, Annotated, Sequence
+from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, AIMessageChunk, SystemMessage
@@ -15,6 +16,14 @@ from langchain_core.outputs import ChatGenerationChunk, ChatGeneration, ChatResu
 from langgraph.graph import START, END
 
 from app.graph.graph import ChatState, compile_graph
+
+
+@pytest.fixture
+def mock_chroma() -> MagicMock:
+    """Return a mock ChromaManager for graph compilation."""
+    chroma = MagicMock()
+    chroma.retrieve.return_value = ["mock chunk"]
+    return chroma
 
 
 class MockStreamingChatModel(BaseChatModel):
@@ -42,18 +51,17 @@ class MockStreamingChatModel(BaseChatModel):
 class TestGraphCompilation:
     """Graph should compile without errors."""
 
-    def test_graph_compiles(self):
+    def test_graph_compiles(self, mock_chroma):
         """compile_graph should return a compiled graph."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         assert graph is not None
 
-    def test_graph_is_compiled(self):
+    def test_graph_is_compiled(self, mock_chroma):
         """The returned graph should be a CompiledStateGraph."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         assert "compile" not in dir(type(graph)) or hasattr(graph, "invoke")
-        # Compiled graphs have invoke/ainvoke methods
         assert hasattr(graph, "invoke")
         assert hasattr(graph, "ainvoke")
         assert hasattr(graph, "astream")
@@ -62,102 +70,95 @@ class TestGraphCompilation:
 class TestGraphStructure:
     """Graph should have correct structure."""
 
-    def test_has_call_model_node(self):
-        """Graph should have a 'call_model' node."""
+    def test_has_routing_node(self, mock_chroma):
+        """Graph should have a 'routing_node' node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         node_names = list(graph.nodes.keys())
-        assert "call_model" in node_names, f"Expected 'call_model' in nodes, got {node_names}"
+        assert "routing_node" in node_names, f"Expected 'routing_node' in nodes, got {node_names}"
 
-    def test_has_two_edges(self):
-        """Graph should have exactly 2 edges (START->call_model, call_model->END)."""
+    def test_has_retrieval_nodes(self, mock_chroma):
+        """Graph should have retrieval nodes for both collections."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
-        g = graph.get_graph()
-        edges = g.edges
-        assert len(edges) == 2, f"Expected 2 edges, got {len(edges)}: {edges}"
+        graph = compile_graph(llm, mock_chroma)
+        node_names = list(graph.nodes.keys())
+        assert "manual_retrieval_node" in node_names
+        assert "forum_retrieval_node" in node_names
 
-    def test_start_to_call_model_edge(self):
-        """There should be an edge from START to call_model."""
+    def test_start_to_routing_edge(self, mock_chroma):
+        """There should be an edge from START to routing_node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
-        g = graph.get_graph()
-        edges = g.edges
-        edge_pairs = [(e.source, e.target) for e in edges]
-        assert (
-            "__start__",
-            "call_model",
-        ) in edge_pairs, f"Expected START->call_model edge, got {edge_pairs}"
-
-    def test_call_model_to_end_edge(self):
-        """There should be an edge from call_model to END."""
-        llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         g = graph.get_graph()
         edges = g.edges
         edge_pairs = [(e.source, e.target) for e in edges]
-        assert (
-            "call_model",
-            "__end__",
-        ) in edge_pairs, f"Expected call_model->END edge, got {edge_pairs}"
+        assert ("__start__", "routing_node") in edge_pairs, (
+            f"Expected START->routing_node edge, got {edge_pairs}"
+        )
+
+    def test_routing_to_conditional_edges(self, mock_chroma):
+        """Routing node should have conditional edges to retrieval nodes or END."""
+        llm = MockStreamingChatModel()
+        graph = compile_graph(llm, mock_chroma)
+        g = graph.get_graph()
+        edges = g.edges
+        routing_edges = [(e.source, e.target) for e in edges if e.source == "routing_node"]
+        assert len(routing_edges) >= 2, (
+            f"Expected routing_node conditional edges, got {routing_edges}"
+        )
+        targets = {t for _, t in routing_edges}
+        assert "manual_retrieval_node" in targets or "forum_retrieval_node" in targets
 
 
 class TestGraphInvocation:
-    """Graph should correctly invoke the LLM and return messages."""
+    """Graph should correctly route messages and set search flags."""
 
-    def test_invoke_returns_messages(self):
+    def test_invoke_returns_messages(self, mock_chroma):
         """Graph invoke should return a dict with 'messages' key."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         result = graph.invoke({"messages": [HumanMessage(content="test")]})
         assert isinstance(result, dict)
         assert "messages" in result
 
-    def test_invoke_appends_response(self):
-        """The response message should be appended to the messages list."""
+    def test_invoke_sets_search_flags(self, mock_chroma):
+        """Graph should set search_manual and search_forum to False by default
+        when routing can't parse the LLM response as valid JSON."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         result = graph.invoke({"messages": [HumanMessage(content="test")]})
-        assert len(result["messages"]) == 2  # input + response
-        assert result["messages"][0].content == "test"
-        assert result["messages"][1].content == "Hello World!"
+        assert result.get("search_manual") is False
+        assert result.get("search_forum") is False
 
-    def test_ainvoke_returns_messages(self):
+    @pytest.mark.asyncio
+    async def test_ainvoke_returns_messages(self, mock_chroma):
         """Async invoke should also return messages."""
-        import asyncio
-
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
-
-        async def run():
-            result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
-            return result
-
-        result = asyncio.run(run())
+        graph = compile_graph(llm, mock_chroma)
+        result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
         assert isinstance(result, dict)
         assert "messages" in result
-        assert len(result["messages"]) == 2
 
-    def test_invoke_with_system_message(self):
+    def test_invoke_with_system_message(self, mock_chroma):
         """Graph should work with system + user messages."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
         result = graph.invoke({
             "messages": [
                 SystemMessage(content="Be concise"),
                 HumanMessage(content="test"),
             ],
         })
-        assert len(result["messages"]) == 3
+        # Messages pass through unchanged (graph doesn't generate responses)
+        assert len(result["messages"]) == 2
         assert result["messages"][0].content == "Be concise"
         assert result["messages"][1].content == "test"
-        assert result["messages"][2].content == "Hello World!"
 
     @pytest.mark.asyncio
-    async def test_astream_events_yields_token_events(self):
+    async def test_astream_events_yields_token_events(self, mock_chroma):
         """astream_events should yield on_chat_model_stream events."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
 
         events = []
         async for event in graph.astream_events(
@@ -171,27 +172,25 @@ class TestGraphInvocation:
         ]
         assert len(stream_events) > 0
 
-        # Check the first stream event has a token
         first = stream_events[0]
         chunk = first.get("data", {}).get("chunk")
         assert chunk is not None
         assert chunk.content
 
-    def test_conversation_context_preserved(self):
-        """Graph should preserve prior conversation context."""
+    def test_conversation_context_preserved(self, mock_chroma):
+        """Graph should preserve prior conversation context (messages pass through)."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm)
+        graph = compile_graph(llm, mock_chroma)
 
-        # First turn
         result1 = graph.invoke({
             "messages": [HumanMessage(content="First message")],
         })
-        assert len(result1["messages"]) == 2
+        assert len(result1["messages"]) == 1
+        assert result1["messages"][0].content == "First message"
 
-        # Second turn — pass full history
         result2 = graph.invoke({
-            "messages": result1["messages"] + [HumanMessage(content="Second message")],
+            "messages": [HumanMessage(content="First message"), HumanMessage(content="Second message")],
         })
-        assert len(result2["messages"]) == 4
+        assert len(result2["messages"]) == 2
         assert result2["messages"][0].content == "First message"
-        assert result2["messages"][2].content == "Second message"
+        assert result2["messages"][1].content == "Second message"
