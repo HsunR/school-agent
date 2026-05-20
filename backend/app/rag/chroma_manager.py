@@ -40,10 +40,15 @@ class ChromaManager:
         """Get or create a ChromaDB collection by name."""
         return self._client.get_or_create_collection(name)
 
+    UPLOAD_BATCH_SIZE = 50
+
     def upload(
         self, category: str, chunks: list[str]
     ) -> dict[str, int]:
         """Upload chunks to a collection, skipping duplicates.
+
+        Processes chunks in batches of ``UPLOAD_BATCH_SIZE`` to avoid
+        embedding huge payloads in a single API call.
 
         Args:
             category: Collection name (``student_manual`` or ``school_forum``).
@@ -74,24 +79,33 @@ class ChromaManager:
             else:
                 new_chunks.append(chunk)
                 new_hashes.append(h)
-                inserted += 1
 
         if not new_chunks:
             return {"inserted": 0, "skipped": skipped}
 
-        # Embed and add
-        embeddings = self.embedding_client.embed(new_chunks)
+        # Process in batches: embed → add → repeat
         now = datetime.now(timezone.utc).isoformat()
-        metadatas = [
-            {"hash": h, "category": category, "created_at": now}
-            for h in new_hashes
-        ]
-        collection.add(
-            ids=new_hashes,
-            embeddings=embeddings,
-            documents=new_chunks,
-            metadatas=metadatas,
-        )
+        for i in range(0, len(new_chunks), self.UPLOAD_BATCH_SIZE):
+            batch_chunks = new_chunks[i : i + self.UPLOAD_BATCH_SIZE]
+            batch_hashes = new_hashes[i : i + self.UPLOAD_BATCH_SIZE]
+            embeddings = self.embedding_client.embed(batch_chunks)
+            metadatas = [
+                {"hash": h, "category": category, "created_at": now}
+                for h in batch_hashes
+            ]
+            collection.add(
+                ids=batch_hashes,
+                embeddings=embeddings,
+                documents=batch_chunks,
+                metadatas=metadatas,
+            )
+            inserted += len(batch_chunks)
+            logger.debug(
+                "Uploaded batch %d/%d to '%s'",
+                i // self.UPLOAD_BATCH_SIZE + 1,
+                (len(new_chunks) + self.UPLOAD_BATCH_SIZE - 1) // self.UPLOAD_BATCH_SIZE,
+                category,
+            )
 
         logger.info(
             "Uploaded %d chunks to '%s' (%d skipped)",
