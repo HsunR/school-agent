@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, FormEvent, useEffect, useRef } from "react";
+import { useState, useCallback, FormEvent, useEffect, useRef, useDeferredValue } from "react";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -296,6 +297,11 @@ export default function AdminPage() {
   // ── Form state ──
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<Category>("student_manual");
+  const [showFullEditor, setShowFullEditor] = useState(false);
+
+  const MAX_EDITOR_CHARS = 8000;
+  const isContentLarge = content.length > MAX_EDITOR_CHARS;
+  const deferredContent = useDeferredValue(content);
   const [delimiter, setDelimiter] = useState("-----SPILIT_BY_HSUNR-----");
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
@@ -320,6 +326,9 @@ export default function AdminPage() {
   const [fileSize, setFileSize] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Full content preservation for large-content toggle ──
+  const fullContentRef = useRef("");
 
   // ── Toast state ──
   const [toast, setToast] = useState<{
@@ -350,6 +359,15 @@ export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
 
+  // ── Preview modal state ──
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewContent, setPreviewContent] = useState("");
+  const [previewShowFull, setPreviewShowFull] = useState(false);
+
+  // ── Record delete state ──
+  const [deletingRecord, setDeletingRecord] = useState(false);
+  const [confirmButtonText, setConfirmButtonText] = useState("确认清空");
+
   // ── Load stats ──
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -371,17 +389,29 @@ export default function AdminPage() {
   }, [loadStats]);
 
   // ── File handling ──
+  const LARGE_FILE_WARN_SIZE = 500 * 1024; // 500KB
+
   const handleFileSelect = useCallback(
     (file: File) => {
       if (!file.name.endsWith(".txt") && !file.name.endsWith(".md")) {
         showToast("仅支持 .txt 和 .md 格式的文件", "error");
         return;
       }
+      if (file.size > LARGE_FILE_WARN_SIZE) {
+        showToast(
+          `文件较大 (${(file.size / 1024 / 1024).toFixed(1)}MB)，` +
+          "加载后仅显示前10000字符预览，完整内容将用于上传",
+          "info",
+        );
+      }
       setFileName(file.name);
       setFileSize(file.size);
+      setShowFullEditor(false);
       const reader = new FileReader();
       reader.onload = (e) => {
-        setContent(e.target?.result as string);
+        const text = e.target?.result as string;
+        fullContentRef.current = text;
+        setContent(text);
       };
       reader.onerror = () => {
         showToast("文件读取失败，请重试", "error");
@@ -495,25 +525,18 @@ export default function AdminPage() {
 
   // ── Clear ──
   const openClearConfirm = useCallback(
-    (cat?: Category) => {
-      const msg = cat
-        ? `确定清空「${CATEGORY_LABELS[cat]}」的所有数据吗？此操作不可恢复！`
-        : "确定清空所有数据吗？此操作不可恢复！";
-      setConfirmMessage(msg);
+    (cat: Category) => {
+      setConfirmMessage(
+        `确定清空「${CATEGORY_LABELS[cat]}」的所有数据吗？此操作不可恢复！`,
+      );
+      setConfirmButtonText("确认清空");
       const doClear = async () => {
         setClearing(true);
         try {
-          const url = cat
-            ? `/api/admin/data?category=${cat}`
-            : "/api/admin/data";
+          const url = `/api/admin/data?category=${cat}`;
           const res = await fetch(url, { method: "DELETE" });
           if (res.ok) {
-            showToast(
-              cat
-                ? `已清空「${CATEGORY_LABELS[cat]}」数据`
-                : "已清空所有数据",
-              "success",
-            );
+            showToast(`已清空「${CATEGORY_LABELS[cat]}」数据`, "success");
             setPreviewData([]);
             setPreviewCategory(null);
             setPreviewPage(1);
@@ -533,6 +556,45 @@ export default function AdminPage() {
       setConfirmOpen(true);
     },
     [loadStats, showToast],
+  );
+
+  // ── Record Delete ──
+  const handleDeleteRecord = useCallback(
+    async (cat: Category, id: string) => {
+      setDeletingRecord(true);
+      try {
+        const res = await fetch(`/api/admin/data?category=${cat}&id=${id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          showToast("记录已删除", "success");
+          if (previewCategory) {
+            loadPreview(previewCategory, previewPage);
+          }
+          loadStats();
+        } else {
+          showToast("删除失败，请重试", "error");
+        }
+      } catch (err) {
+        showToast(`删除失败: ${err}`, "error");
+      } finally {
+        setDeletingRecord(false);
+        setConfirmOpen(false);
+      }
+    },
+    [previewCategory, previewPage, loadPreview, loadStats, showToast],
+  );
+
+  const confirmDeleteRecord = useCallback(
+    (cat: Category, id: string) => {
+      setConfirmMessage("确定删除这条记录吗？此操作不可恢复！");
+      setConfirmButtonText("确认删除");
+      setConfirmAction(() => () => {
+        handleDeleteRecord(cat, id);
+      });
+      setConfirmOpen(true);
+    },
+    [handleDeleteRecord],
   );
 
   // ── Pagination ──
@@ -718,12 +780,66 @@ export default function AdminPage() {
               </button>
               <button
                 onClick={confirmAction}
-                disabled={clearing}
+                disabled={clearing || deletingRecord}
                 className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-red-600 hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {clearing && <IconSpinner />}
-                {clearing ? "清空中..." : "确认清空"}
+                {(clearing || deletingRecord) && <IconSpinner />}
+                {clearing ? "清空中..." : deletingRecord ? "删除中..." : confirmButtonText}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Markdown Preview Modal ── */}
+      {previewOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.4)",
+            backdropFilter: "blur(4px)",
+            transition: "opacity 0.2s ease",
+          }}
+          onClick={() => setPreviewOpen(false)}
+        >
+          <div
+            className="mx-4 flex max-h-[80vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              transition: "transform 0.2s ease, opacity 0.2s ease",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                内容预览
+              </h3>
+              <button
+                onClick={() => setPreviewOpen(false)}
+                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              >
+                <IconClose />
+              </button>
+            </div>
+            {/* Content */}
+            <div className="overflow-y-auto px-6 py-4">
+              <div className="prose prose-sm max-w-none text-gray-700">
+                {previewShowFull || previewContent.length <= 10000 ? (
+                  <MarkdownRenderer content={previewContent} />
+                ) : (
+                  <>
+                    <MarkdownRenderer content={previewContent.slice(0, 5000) + "..."} />
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        onClick={() => setPreviewShowFull(true)}
+                        className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                      >
+                        显示全部内容（共 {previewContent.length} 字符）
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -786,14 +902,42 @@ export default function AdminPage() {
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
                   资料内容
                 </label>
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  rows={8}
-                  className="w-full rounded-xl border border-gray-300 bg-gray-50 p-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                  placeholder="粘贴或输入资料内容..."
-                  required
-                />
+                {isContentLarge && !showFullEditor ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={deferredContent.slice(0, MAX_EDITOR_CHARS) + `\n\n... [内容过长，仅显示前 ${MAX_EDITOR_CHARS} 字符，共 ${content.length} 字符]`}
+                      readOnly
+                      rows={8}
+                      className="w-full rounded-xl border border-gray-300 bg-gray-100 p-3 text-sm text-gray-500 transition-colors"
+                      placeholder="粘贴或输入资料内容..."
+                    />
+                    <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                      <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      <span className="flex-1">内容较大，暂只可预览前 {MAX_EDITOR_CHARS} 字符</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContent(fullContentRef.current || content);
+                          setShowFullEditor(true);
+                        }}
+                        className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                      >
+                        加载全部内容编辑
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <textarea
+                    value={deferredContent}
+                    onChange={(e) => setContent(e.target.value)}
+                    rows={8}
+                    className="w-full rounded-xl border border-gray-300 bg-gray-50 p-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    placeholder="粘贴或输入资料内容..."
+                    required
+                  />
+                )}
               </div>
             ) : (
               <div>
@@ -881,7 +1025,7 @@ export default function AdminPage() {
                       文件内容预览（可编辑）
                     </label>
                     <textarea
-                      value={content}
+                      value={deferredContent}
                       onChange={(e) => setContent(e.target.value)}
                       rows={5}
                       className="w-full rounded-xl border border-gray-300 bg-gray-50 p-3 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -1027,28 +1171,7 @@ export default function AdminPage() {
             })}
           </div>
 
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={() => openClearConfirm()}
-              disabled={clearing}
-              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm transition-all hover:bg-red-50 hover:shadow disabled:opacity-50"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-              清空所有数据
-            </button>
-          </div>
+
         </section>
 
         {/* ═══ Preview Section ═══ */}
@@ -1110,13 +1233,21 @@ export default function AdminPage() {
                         <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                           时间
                         </th>
+                        <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                          操作
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {previewData.map((item, i) => (
                         <tr
                           key={item.id || i}
-                          className="transition-colors hover:bg-blue-50/50"
+                          className="cursor-pointer transition-colors hover:bg-blue-50/50"
+                          onClick={() => {
+                            setPreviewContent(item.document);
+                            setPreviewShowFull(false);
+                            setPreviewOpen(true);
+                          }}
                         >
                           <td className="max-w-xs px-5 py-3 text-sm text-gray-700">
                             <div className="line-clamp-2 leading-relaxed">
@@ -1135,6 +1266,22 @@ export default function AdminPage() {
                                   item.metadata.created_at,
                                 ).toLocaleString("zh-CN")
                               : "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-3 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmDeleteRecord(
+                                  previewCategory!,
+                                  item.id,
+                                );
+                              }}
+                              disabled={deletingRecord}
+                              className="rounded-lg p-1.5 text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                              title="删除"
+                            >
+                              <IconTrash />
+                            </button>
                           </td>
                         </tr>
                       ))}

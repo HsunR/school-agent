@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -93,10 +94,14 @@ interface MarkdownRendererProps {
   content: string;
 }
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+}: MarkdownRendererProps) {
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
       {content}
     </ReactMarkdown>
   );
-}
+});
+
+export default MarkdownRenderer;
