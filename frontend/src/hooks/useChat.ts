@@ -27,11 +27,6 @@ export function useChat() {
       return;
     }
 
-    if (trimmed.length > 1000) {
-      setError("Message must be 1000 characters or less");
-      return;
-    }
-
     if (isLoadingRef.current) return;
 
     setIsLoading(true);
@@ -55,11 +50,14 @@ export function useChat() {
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
 
     try {
+      const historyMessages = messagesRef.current.filter(
+        (m) => m.role === "user" || m.role === "assistant",
+      );
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messagesRef.current, userMessage],
+          messages: [...historyMessages, userMessage],
           stream: true,
         }),
       });
@@ -114,6 +112,44 @@ export function useChat() {
               setMessages((prev) => {
                 const updated = [...prev];
                 updated.splice(updated.length - 1, 0, retrievalMsg);
+                return updated;
+              });
+              continue;
+            }
+
+            if (payload.type === "scoring" && payload.source === "done" && payload.done) {
+              continue;
+            }
+
+            if (payload.type === "scoring" && payload.source && payload.index !== undefined) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const sourceMap: Record<string, string> = {
+                  school_forum: "学校贴吧",
+                  student_manual: "学生手册",
+                };
+                const targetSource = sourceMap[payload.source!] || payload.source!;
+                for (let j = updated.length - 1; j >= 0; j--) {
+                  const msg = updated[j];
+                  if (msg.role === "retrieval" && msg.chunks) {
+                    const chunksFromSource = msg.chunks.filter(
+                      (c) => c.source === targetSource,
+                    );
+                    if (chunksFromSource.length > 0) {
+                      const newChunks = [...msg.chunks];
+                      const localIdx = msg.chunks.indexOf(chunksFromSource[payload.index!]);
+                      if (localIdx >= 0) {
+                        newChunks[localIdx] = {
+                          ...newChunks[localIdx],
+                          score: payload.score,
+                          compressed: payload.compressed,
+                        };
+                        updated[j] = { ...msg, chunks: newChunks };
+                      }
+                      break;
+                    }
+                  }
+                }
                 return updated;
               });
               continue;
