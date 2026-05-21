@@ -29,7 +29,7 @@ const IDLE_STATUS: QueueStatus = {
 export function useQueueStatus(options?: UseQueueStatusOptions) {
   const [status, setStatus] = useState<QueueStatus>(IDLE_STATUS);
   const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onIdleRef = useRef(options?.onIdle);
   onIdleRef.current = options?.onIdle;
 
@@ -56,23 +56,27 @@ export function useQueueStatus(options?: UseQueueStatusOptions) {
   }, []);
 
   useEffect(() => {
-    fetchStatus();
+    let active = true;
 
-    intervalRef.current = setInterval(async () => {
+    const poll = async () => {
       const data = await fetchStatus();
+      if (!active) return;
       if (data && !data.busy && data.pending === 0) {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
         onIdleRef.current?.();
+        return;
       }
-    }, POLL_INTERVAL);
+      if (active) {
+        timeoutRef.current = setTimeout(poll, POLL_INTERVAL);
+      }
+    };
+
+    fetchStatus();
+    timeoutRef.current = setTimeout(poll, POLL_INTERVAL);
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      active = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
   }, [fetchStatus]);

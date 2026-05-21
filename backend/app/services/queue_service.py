@@ -57,6 +57,7 @@ class QueueService:
 
     async def _worker_loop(self) -> None:
         """Background loop: process tasks one at a time until cancelled or empty."""
+        self._cancel_flag = False  # Reset on entry — prevents stale flag from previous clear
         while not self._cancel_flag:
             try:
                 self._current_task = self._queue.get_nowait()
