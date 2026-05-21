@@ -103,8 +103,10 @@ def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
         search_query_manual = ""
         search_query_forum = ""
     logger.info(
-        "Routing decision for '%s...': manual=%s, forum=%s",
+        "Routing decision for '%s...': manual=%s, forum=%s, "
+        "manual_query=%s, forum_query=%s",
         last_msg[:50], search_manual, search_forum,
+        search_query_manual, search_query_forum,
     )
     return {
         "search_manual": search_manual,
