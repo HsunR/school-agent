@@ -15,7 +15,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatGenerationChunk, ChatGeneration, ChatResult
 from langgraph.graph import START, END
 
-from app.graph.graph import ChatState, compile_graph
+from app.graph.graph import ChatState, compile_graph, manual_retrieval_node
 
 
 @pytest.fixture
@@ -178,6 +178,24 @@ class TestGraphInvocation:
         chunk = first.get("data", {}).get("chunk")
         assert chunk is not None
         assert chunk.content
+
+    def test_retrieval_uses_search_query(self, mock_chroma):
+        """Retrieval nodes should use search_query from state, not raw user message."""
+        state: ChatState = {
+            "messages": [HumanMessage("旷课了怎么办")],
+            "search_manual": True,
+            "search_forum": False,
+            "search_query_manual": "旷课 处分 规定",
+            "search_query_forum": "",
+            "manual_chunks": [],
+            "forum_chunks": [],
+        }
+
+        result = manual_retrieval_node(state, mock_chroma)
+        assert "manual_chunks" in result
+        mock_chroma.retrieve.assert_called_once()
+        called_query = mock_chroma.retrieve.call_args[0][1]
+        assert called_query == "旷课 处分 规定"
 
     def test_conversation_context_preserved(self, mock_chroma):
         """Graph should preserve prior conversation context (messages pass through)."""

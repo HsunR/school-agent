@@ -120,8 +120,10 @@ def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     """Retrieve chunks from the student manual collection."""
     if not state.get("search_manual"):
         return {"manual_chunks": []}
-    last_msg = state["messages"][-1].content if state["messages"] else ""
-    chunks = chroma.retrieve(COLLECTION_MANUAL, last_msg)
+    query = state.get("search_query_manual") or ""
+    if not query:
+        return {"manual_chunks": []}
+    chunks = chroma.retrieve(COLLECTION_MANUAL, query)
     logger.info("Manual retrieval: %d chunks", len(chunks))
     return {"manual_chunks": chunks}
 
@@ -130,8 +132,10 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     """Retrieve chunks from the school forum collection."""
     if not state.get("search_forum"):
         return {"forum_chunks": []}
-    last_msg = state["messages"][-1].content if state["messages"] else ""
-    chunks = chroma.retrieve(COLLECTION_FORUM, last_msg)
+    query = state.get("search_query_forum") or ""
+    if not query:
+        return {"forum_chunks": []}
+    chunks = chroma.retrieve(COLLECTION_FORUM, query)
     logger.info("Forum retrieval: %d chunks", len(chunks))
     return {"forum_chunks": chunks}
 
