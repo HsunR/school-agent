@@ -8,7 +8,7 @@ from app.rag.chroma_manager import ChromaManager
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_BATCH_SIZE = 50
+UPLOAD_BATCH_SIZE = 20
 
 
 class QueueTask(NamedTuple):

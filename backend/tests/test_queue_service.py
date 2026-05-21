@@ -115,5 +115,5 @@ async def test_worker_updates_progress(chroma_mock):
     task = QueueTask(id="t1", filename="big.txt", category="student_manual", chunks=chunks)
     await svc.enqueue(task)
     await svc._worker_loop()
-    assert chroma_mock.upload.call_count == 2
-    assert results == [50, 50]
+    assert chroma_mock.upload.call_count == 5
+    assert results == [20, 20, 20, 20, 20]
