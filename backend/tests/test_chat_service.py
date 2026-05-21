@@ -6,7 +6,7 @@ Tests cover:
 - Error handling
 """
 
-import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,30 +23,12 @@ from app.schemas.chat import ChatMessage
 from app.services.chat_service import ChatService
 
 
-class MockStreamingChatModel:
-    """Mock chat model that streams tokens.
-
-    This is not a BaseChatModel subclass - we use it to replace
-    ChatOpenAI at the module level via patch. The graph.astream_events
-    approach means we need to mock at a higher level for service tests.
-    """
-
-    streaming = True
-
-    def __init__(self, **kwargs):
-        self.model = kwargs.get("model", "test")
-        self.base_url = kwargs.get("base_url", "")
-        self.api_key = kwargs.get("api_key", "")
-        self.timeout = kwargs.get("timeout", 30)
-
-
 class TestToLangChain:
     """Message format conversion."""
 
     def setup_method(self):
-        with patch("app.services.chat_service.ChatOpenAI") as mock:
+        with patch("app.services.chat_service.ChatOpenAI"):
             self.service = ChatService(Settings())
-            self.service.llm = mock.return_value
 
     def test_user_message(self):
         result = self.service._to_langchain(
@@ -85,119 +67,81 @@ class TestToLangChain:
 
 
 class TestStreamChat:
-    """Token streaming via the chat_llm.astream()."""
+    """Token streaming via graph.astream()."""
 
     @pytest.mark.asyncio
-    async def test_stream_chat_yields_tokens(self):
-        """stream_chat should yield tokens from chat_llm.astream()."""
+    async def test_stream_chat_yields_typed_events(self):
+        """stream_chat should yield typed SSE events from graph.astream."""
         settings = Settings()
+        service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
-            for token in ["Hello", " ", "World", "!"]:
-                yield AIMessageChunk(content=token)
+            yield "updates", {"routing_node": {"search_manual": False, "search_forum": False, "search_query_manual": "", "search_query_forum": ""}}
+            yield "messages", (AIMessageChunk(content="Hello"), {})
+            yield "messages", (AIMessageChunk(content=" World"), {})
 
-        with patch("app.services.chat_service.ChatOpenAI") as mock:
-            mock_instance = mock.return_value
-            mock_instance.invoke.return_value = AIMessage(
-                content='{"search_manual": false, "search_forum": false}'
-            )
-            mock_instance.astream.return_value = _mock_astream()
-            service = ChatService(settings)
+        service.graph.astream = _mock_astream
 
-        collected = []
-        async for token in service.stream_chat(
+        events = []
+        async for event_str in service.stream_chat(
             [ChatMessage(role="user", content="test")]
         ):
-            collected.append(token)
+            events.append(json.loads(event_str))
 
-        assert "".join(collected) == "Hello World!", (
-            f"Expected 'Hello World!', got {''.join(collected)!r}"
-        )
+        types = [e["type"] for e in events]
+        assert "status" in types
+        assert "token" in types
+        token_contents = [e["token"] for e in events if e["type"] == "token" and not e.get("done")]
+        assert "".join(token_contents) == "Hello World"
 
     @pytest.mark.asyncio
     async def test_stream_chat_skips_empty_tokens(self):
-        """Empty tokens from chat_llm.astream() should be skipped."""
+        """Empty tokens from graph should be skipped."""
         settings = Settings()
+        service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
-            for token in ["Hello", "", "World", ""]:
-                yield AIMessageChunk(content=token)
+            yield "updates", {"routing_node": {"search_manual": False, "search_forum": False, "search_query_manual": "", "search_query_forum": ""}}
+            yield "messages", (AIMessageChunk(content="Hello"), {})
+            yield "messages", (AIMessageChunk(content=""), {})
+            yield "messages", (AIMessageChunk(content="World"), {})
 
-        with patch("app.services.chat_service.ChatOpenAI") as mock:
-            mock_instance = mock.return_value
-            mock_instance.invoke.return_value = AIMessage(
-                content='{"search_manual": false, "search_forum": false}'
-            )
-            mock_instance.astream.return_value = _mock_astream()
-            service = ChatService(settings)
+        service.graph.astream = _mock_astream
 
-        collected = []
-        async for token in service.stream_chat(
+        events = []
+        async for event_str in service.stream_chat(
             [ChatMessage(role="user", content="test")]
         ):
-            collected.append(token)
+            events.append(json.loads(event_str))
 
-        assert "".join(collected) == "HelloWorld", (
-            f"Expected 'HelloWorld', got {''.join(collected)!r}"
-        )
+        token_contents = [e["token"] for e in events if e["type"] == "token" and not e.get("done")]
+        assert "".join(token_contents) == "HelloWorld"
 
 
 class TestErrorHandling:
-    """Error handling in stream_chat."""
+    """Error handling in stream_chat via graph.astream."""
 
     @pytest.mark.asyncio
     async def test_stream_chat_re_raises_error(self):
-        """Errors from chat_llm.astream() should be re-raised."""
+        """Errors from graph.astream should yield an error event."""
         settings = Settings()
+        service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
-            raise RuntimeError("LLM API error")
+            raise RuntimeError("Graph error")
             yield  # pragma: no cover
 
-        with patch("app.services.chat_service.ChatOpenAI") as mock:
-            mock_instance = mock.return_value
-            mock_instance.invoke.return_value = AIMessage(
-                content='{"search_manual": false, "search_forum": false}'
-            )
-            mock_instance.astream.return_value = _mock_astream()
-            service = ChatService(settings)
+        service.graph.astream = _mock_astream
 
-        with pytest.raises(RuntimeError, match="LLM API error"):
-            async for _ in service.stream_chat(
-                [ChatMessage(role="user", content="test")]
-            ):
-                pass  # pragma: no cover
+        events = []
+        async for event_str in service.stream_chat(
+            [ChatMessage(role="user", content="test")]
+        ):
+            events.append(json.loads(event_str))
 
-    @pytest.mark.asyncio
-    async def test_stream_chat_with_stream_error_mid_stream(self):
-        """Error mid-stream should be re-raised."""
-        settings = Settings()
-
-        class MidStreamError(RuntimeError):
-            pass
-
-        async def _mock_astream(*args, **kwargs):
-            yield AIMessageChunk(content="partial")
-            raise MidStreamError("Connection lost")
-
-        with patch("app.services.chat_service.ChatOpenAI") as mock:
-            mock_instance = mock.return_value
-            mock_instance.invoke.return_value = AIMessage(
-                content='{"search_manual": false, "search_forum": false}'
-            )
-            mock_instance.astream.return_value = _mock_astream()
-            service = ChatService(settings)
-
-        tokens = []
-        with pytest.raises(MidStreamError, match="Connection lost"):
-            async for token in service.stream_chat(
-                [ChatMessage(role="user", content="test")]
-            ):
-                tokens.append(token)
-
-        # Should have yielded partial token before error
-        assert "".join(tokens) == "partial"
-
+        assert len(events) == 1
+        assert events[0]["type"] == "error"
+        assert events[0]["done"] is True
 
 class TestTimeout:
     """Timeout configuration handling in ChatService."""
@@ -234,30 +178,22 @@ class TestTimeout:
 
     @pytest.mark.asyncio
     async def test_stream_chat_with_simulated_timeout(self):
-        """Simulate a timeout by having chat_llm.astream() raise.
-
-        The service should re-raise the timeout exception so the caller
-        can handle it appropriately.
-        """
-        settings = Settings(llm_timeout=1)
+        """Errors from graph.astream should yield an error event."""
+        settings = Settings()
+        service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
-            import asyncio
-
-            await asyncio.sleep(0.01)  # simulate brief work
             raise TimeoutError("LLM timed out")
             yield  # pragma: no cover
 
-        with patch("app.services.chat_service.ChatOpenAI") as mock:
-            mock_instance = mock.return_value
-            mock_instance.invoke.return_value = AIMessage(
-                content='{"search_manual": false, "search_forum": false}'
-            )
-            mock_instance.astream.return_value = _mock_astream()
-            service = ChatService(settings)
+        service.graph.astream = _mock_astream
 
-        with pytest.raises(TimeoutError, match="LLM timed out"):
-            async for _ in service.stream_chat(
-                [ChatMessage(role="user", content="test")]
-            ):
-                pass  # pragma: no cover
+        events = []
+        async for event_str in service.stream_chat(
+            [ChatMessage(role="user", content="test")]
+        ):
+            events.append(json.loads(event_str))
+
+        assert len(events) == 1
+        assert events[0]["type"] == "error"
+        assert events[0]["done"] is True

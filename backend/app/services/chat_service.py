@@ -4,12 +4,14 @@ Runs the LangGraph pipeline for routing + retrieval, then streams
 the final answer directly via ``llm.astream()`` for proper per-token SSE.
 """
 
+import json
 import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -17,7 +19,7 @@ from langchain_core.messages import (
 from langchain_openai import ChatOpenAI
 
 from app.core.settings import Settings
-from app.graph.graph import RETRIEVAL_CONTEXT_TEMPLATE, compile_graph
+from app.graph.graph import compile_graph
 from app.rag.chroma_manager import ChromaManager
 from app.rag.embeddings import EmbeddingClient
 from app.schemas.chat import ChatMessage
@@ -79,51 +81,73 @@ class ChatService:
         self,
         messages: list[ChatMessage],
     ) -> AsyncGenerator[str, Any]:
-        """Stream a chat response with optional RAG context.
-
-        1. Run the LangGraph pipeline (routing + retrieval, sync).
-        2. If context was retrieved, prepend it as a system message.
-        3. Stream the answer via ``llm.astream()``.
-        """
+        """Stream a chat response with SSE-typed events via graph.astream."""
         langchain_messages = self._to_langchain(messages)
 
-        # ── Step 1: Run graph for routing + retrieval ──
+        initial_state = {
+            "messages": langchain_messages,
+            "search_manual": False,
+            "search_forum": False,
+            "search_query_manual": "",
+            "search_query_forum": "",
+            "manual_chunks": [],
+            "forum_chunks": [],
+        }
+
         try:
-            initial_state = {
-                "messages": langchain_messages,
-                "search_manual": False,
-                "search_forum": False,
-                "manual_chunks": [],
-                "forum_chunks": [],
+            async for event_type, event_data in self.graph.astream(
+                initial_state,
+                stream_mode=["updates", "messages"],
+            ):
+                if event_type == "updates":
+                    for node_name, node_output in event_data.items():
+                        sse_event = self._convert_update_to_sse(node_name, node_output)
+                        if sse_event:
+                            yield sse_event
+                elif event_type == "messages":
+                    msg_chunk, metadata = event_data
+                    if isinstance(msg_chunk, AIMessageChunk) and msg_chunk.content:
+                        yield json.dumps({
+                            "type": "token",
+                            "token": msg_chunk.content,
+                        }, ensure_ascii=False)
+        except Exception:
+            logger.exception("Graph streaming failed")
+            yield json.dumps({
+                "type": "error", "error": "服务异常，请重试", "done": True,
+            }, ensure_ascii=False)
+            return
+
+        yield json.dumps({"type": "token", "token": "", "done": True})
+
+    def _convert_update_to_sse(self, node_name: str, node_output: dict) -> str | None:
+        if node_name == "routing_node":
+            decision = {
+                "search_manual": node_output.get("search_manual", False),
+                "search_forum": node_output.get("search_forum", False),
             }
-            final_state = self.graph.invoke(initial_state)
-        except Exception:
-            logger.exception("Graph pipeline failed, falling back to direct chat")
-            final_state = {"manual_chunks": [], "forum_chunks": []}
+            return json.dumps({
+                "type": "status", "node": "routing",
+                "label": "正在分析你的问题...",
+                "decision": decision,
+            }, ensure_ascii=False)
 
-        # ── Step 2: Build context-augmented messages ──
-        manual_ctx = "\n\n".join(final_state.get("manual_chunks", []))
-        forum_ctx = "\n\n".join(final_state.get("forum_chunks", []))
-        has_context = bool(manual_ctx.strip() or forum_ctx.strip())
+        elif node_name == "manual_retrieval_node":
+            chunks = node_output.get("manual_chunks", [])
+            previews = [{"preview": c[:200], "source": "学生手册"} for c in chunks]
+            label = "已检索到【学生手册】相关规定" if chunks else "【学生手册】未检索到相关内容"
+            return json.dumps({
+                "type": "retrieval", "source": "student_manual",
+                "label": label, "chunks": previews,
+            }, ensure_ascii=False)
 
-        if has_context:
-            context_prompt = RETRIEVAL_CONTEXT_TEMPLATE.format(
-                manual_context=manual_ctx or "（未检索到相关内容）",
-                forum_context=forum_ctx or "（未检索到相关内容）",
-            )
-            augmented_messages = [
-                SystemMessage(content=context_prompt),
-                *langchain_messages,
-            ]
-        else:
-            augmented_messages = langchain_messages
+        elif node_name == "forum_retrieval_node":
+            chunks = node_output.get("forum_chunks", [])
+            previews = [{"preview": c[:200], "source": "学校贴吧"} for c in chunks]
+            label = "已检索到【学校贴吧】相关讨论" if chunks else "【学校贴吧】未检索到相关内容"
+            return json.dumps({
+                "type": "retrieval", "source": "school_forum",
+                "label": label, "chunks": previews,
+            }, ensure_ascii=False)
 
-        # ── Step 3: Stream answer ──
-        try:
-            async for chunk in self.chat_llm.astream(augmented_messages):
-                content: str = chunk.content
-                if content:
-                    yield content
-        except Exception:
-            logger.exception("Stream chat error")
-            raise
+        return None
