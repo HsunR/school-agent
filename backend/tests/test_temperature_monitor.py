@@ -50,6 +50,22 @@ class TestCpuTemperature:
         monitor = TemperatureMonitor()
         assert monitor.get_cpu_temp() is None
 
+    def test_cpu_temp_falls_back_to_lhm_when_wmi_returns_none(self, monkeypatch):
+        mock_wmi_cls = MagicMock()
+        mock_wmi_cls.return_value.MSAcpi_ThermalZoneTemperature.return_value = []
+        monkeypatch.setitem(sys.modules, "wmi", _mock_wmi_module(mock_wmi_cls))
+        monitor = TemperatureMonitor()
+        monkeypatch.setattr(monitor, "_get_cpu_temp_lhm", lambda: 68.5)
+        assert monitor.get_cpu_temp() == 68.5
+
+    def test_cpu_temp_returns_none_when_both_wmi_and_lhm_fail(self, monkeypatch):
+        mock_wmi_cls = MagicMock()
+        mock_wmi_cls.return_value.MSAcpi_ThermalZoneTemperature.return_value = []
+        monkeypatch.setitem(sys.modules, "wmi", _mock_wmi_module(mock_wmi_cls))
+        monitor = TemperatureMonitor()
+        monkeypatch.setattr(monitor, "_get_cpu_temp_lhm", lambda: None)
+        assert monitor.get_cpu_temp() is None
+
 
 class TestGpuTemperature:
     def test_gpu_temp_returns_float_when_nvidia_smi_available(self, monkeypatch):

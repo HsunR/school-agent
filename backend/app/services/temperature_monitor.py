@@ -1,6 +1,7 @@
 """CPU/GPU temperature monitoring for queue throttling."""
 
 import logging
+import os
 import subprocess
 
 logger = logging.getLogger(__name__)
@@ -18,21 +19,54 @@ class TemperatureMonitor:
 
     def get_cpu_temp(self) -> float | None:
         """Return CPU temperature in °C, or ``None`` if unavailable."""
+        # Try WMI first (works for Intel)
         try:
             import wmi
 
             c = wmi.WMI(namespace="root\\WMI")
             temps = c.MSAcpi_ThermalZoneTemperature()
-            if not temps:
-                return None
-            temp_c = (temps[0].CurrentTemperature / 10.0) - 273.15
-            return round(temp_c, 2)
+            if temps:
+                temps_c = [
+                    (t.CurrentTemperature / 10.0) - 273.15
+                    for t in temps
+                    if t.CurrentTemperature is not None and t.CurrentTemperature > 0
+                ]
+                if temps_c:
+                    return round(max(temps_c), 2)
         except ImportError:
-            logger.debug("wmi module not available, skipping CPU temperature")
-            return None
+            logger.debug("wmi module not available, skipping WMI CPU temp")
         except Exception:
             logger.debug("Failed to query CPU temperature via WMI", exc_info=True)
+
+        # Fallback to LibreHardwareMonitorLib (works for AMD)
+        return self._get_cpu_temp_lhm()
+
+    def _get_cpu_temp_lhm(self) -> float | None:
+        """Read CPU temperature via LibreHardwareMonitorLib (AMD fallback)."""
+        dll_path = os.path.join(os.path.dirname(__file__), "sensors", "LibreHardwareMonitorLib.dll")
+        if not os.path.isfile(dll_path):
+            logger.debug("LibreHardwareMonitorLib.dll not found")
             return None
+        try:
+            import clr
+
+            clr.AddReference(dll_path)
+            from LibreHardwareMonitor.Hardware import Computer, SensorType
+
+            computer = Computer()
+            computer.IsCpuEnabled = True
+            computer.Open()
+            try:
+                for hardware in computer.Hardware:
+                    hardware.Update()
+                    for sensor in hardware.Sensors:
+                        if sensor.SensorType == SensorType.Temperature and "CPU" in sensor.Name:
+                            return round(float(sensor.Value), 2)
+            finally:
+                computer.Close()
+        except Exception:
+            logger.debug("Failed to query CPU temperature via LHM", exc_info=True)
+        return None
 
     def get_gpu_temp(self) -> float | None:
         """Return GPU temperature in °C, or ``None`` if unavailable."""
