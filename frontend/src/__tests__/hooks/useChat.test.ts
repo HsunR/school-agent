@@ -48,7 +48,6 @@ describe("useChat", () => {
     expect(body.messages).toHaveLength(1);
     expect(body.messages[0].role).toBe("user");
     expect(body.messages[0].content).toBe("Hello");
-    expect(body.stream).toBe(true);
   });
 
   it("should accumulate streaming tokens in the assistant message", async () => {

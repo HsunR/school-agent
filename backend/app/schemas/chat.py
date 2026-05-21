@@ -9,12 +9,11 @@ class ChatMessage(BaseModel):
     """A single message in a chat conversation."""
 
     role: Literal["user", "assistant", "system"]
-    content: str = Field(..., min_length=1, max_length=1000)
+    content: str = Field(..., min_length=1)
 
 
 class ChatRequest(BaseModel):
     """Request payload for chat completion."""
 
     messages: list[ChatMessage] = Field(..., min_length=1)
-    stream: bool = True
 

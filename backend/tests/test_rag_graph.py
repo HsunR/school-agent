@@ -9,6 +9,7 @@ from app.graph.graph import (
     ChatState,
     routing_node,
     manual_retrieval_node,
+    forum_retrieval_node,
     scoring_node,
     should_retrieve,
 )
@@ -82,6 +83,46 @@ def test_manual_retrieval_node_emits_full_content(mock_writer):
     assert written["chunks"][0]["preview"] == long_content
 
 
+@patch("app.graph.graph.get_stream_writer")
+def test_manual_retrieval_node_skips_when_query_empty(mock_writer):
+    """When search_manual=True but search_query_manual is empty, should return empty and disable search."""
+    chroma = MagicMock()
+    state: ChatState = {
+        "messages": [],
+        "search_manual": True,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+    }
+    result = manual_retrieval_node(state, chroma)
+    assert result["manual_chunks"] == []
+    assert result["search_manual"] is False
+    chroma.retrieve.assert_not_called()
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_forum_retrieval_node_skips_when_query_empty(mock_writer):
+    """When search_forum=True but search_query_forum is empty, should return empty and disable search."""
+    chroma = MagicMock()
+    state: ChatState = {
+        "messages": [],
+        "search_manual": False,
+        "search_forum": True,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+    }
+    result = forum_retrieval_node(state, chroma)
+    assert result["forum_chunks"] == []
+    assert result["search_forum"] is False
+    chroma.retrieve.assert_not_called()
+
+
 def test_should_retrieve_manual_first():
     state: ChatState = {
         "messages": [],
@@ -89,6 +130,9 @@ def test_should_retrieve_manual_first():
         "search_forum": False,
         "search_query_manual": "",
         "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
     }
     assert should_retrieve(state) == "manual_retrieval_node"
 
@@ -100,6 +144,9 @@ def test_should_retrieve_forum_after_manual():
         "search_forum": True,
         "search_query_manual": "",
         "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
     }
     assert should_retrieve(state) == "forum_retrieval_node"
 
@@ -111,6 +158,9 @@ def test_should_retrieve_answer_node_when_no_search():
         "search_forum": False,
         "search_query_manual": "",
         "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
     }
     assert should_retrieve(state) == "scoring_node"
 

@@ -2,19 +2,19 @@
 
 Graph:
     START -> routing_node
-              |
-              v (should_retrieve)
-         +----+----+
-    manual_node  forum_node  (or scoring_node if neither)
-         |           |
-         +-----+-----+
                |
-         scoring_node
-               |
-           answer_node
-               |
-              v
-             END
+               v (should_retrieve)
+          +----+----+
+    manual_retrieval_node  forum_retrieval_node  (or scoring_node if neither)
+          |                    |
+          +---------+----------+
+                    |
+              scoring_node
+                    |
+               answer_node
+                    |
+                   v
+                  END
 
 Nodes emit typed events via ``get_stream_writer()`` for SSE streaming.
 """
@@ -167,7 +167,7 @@ def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"manual_chunks": []}
     query = state.get("search_query_manual") or ""
     if not query:
-        return {"manual_chunks": []}
+        return {"manual_chunks": [], "search_manual": False}
     chunks = chroma.retrieve(COLLECTION_MANUAL, query)
     logger.info("Manual retrieval: %d chunks", len(chunks))
     previews = [{"preview": c, "source": SOURCE_MANUAL_LABEL} for c in chunks]
@@ -187,7 +187,7 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"forum_chunks": []}
     query = state.get("search_query_forum") or ""
     if not query:
-        return {"forum_chunks": []}
+        return {"forum_chunks": [], "search_forum": False}
     chunks = chroma.retrieve(COLLECTION_FORUM, query)
     logger.info("Forum retrieval: %d chunks", len(chunks))
     previews = [{"preview": c, "source": SOURCE_FORUM_LABEL} for c in chunks]
@@ -229,8 +229,8 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         score = 0
         compressed = ""
         try:
-            safe_question = user_question[:MAX_QUESTION_CHARS].replace("{", "{{").replace("}", "}}")
-            safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS].replace("{", "{{").replace("}", "}}")
+            safe_question = user_question[:MAX_QUESTION_CHARS]
+            safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS]
             logger.debug("Scoring prompt for %s chunk %d: user_question=%.50s..., chunk=%.50s...",
                          source_key, idx, user_question, chunk_text)
             response: AIMessage = scoring_llm.invoke([
@@ -304,8 +304,8 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
     if has_context:
         context_msg = SystemMessage(
             RETRIEVAL_CONTEXT_TEMPLATE.format(
-                manual_context=manual_context,
-                forum_context=forum_context,
+                manual_context=manual_context.replace("{", "{{").replace("}", "}}"),
+                forum_context=forum_context.replace("{", "{{").replace("}", "}}"),
             )
         )
         messages.insert(0, context_msg)
@@ -323,9 +323,9 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
 
 def should_retrieve(state: ChatState) -> str:
     """Return the next node: retrieval node or scoring_node."""
-    if state.get("search_manual") and "manual_chunks" not in state:
+    if state.get("search_manual") and not state.get("manual_chunks"):
         return "manual_retrieval_node"
-    if state.get("search_forum") and "forum_chunks" not in state:
+    if state.get("search_forum") and not state.get("forum_chunks"):
         return "forum_retrieval_node"
     return "scoring_node"
 
