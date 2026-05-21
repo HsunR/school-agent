@@ -84,6 +84,9 @@ class QueueService:
         """Process a single task by uploading chunks in batches."""
         chunks = task.chunks
         for i in range(0, len(chunks), UPLOAD_BATCH_SIZE):
+            if self._cancel_flag:
+                logger.info("Task '%s' cancelled (flag set)", task.filename)
+                break
             batch = chunks[i : i + UPLOAD_BATCH_SIZE]
             await asyncio.to_thread(self._chroma.upload, task.category, batch)
             self._chunk_progress += len(batch)

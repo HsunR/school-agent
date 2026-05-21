@@ -117,3 +117,13 @@ async def test_worker_updates_progress(chroma_mock):
     await svc._worker_loop()
     assert chroma_mock.upload.call_count == 5
     assert results == [20, 20, 20, 20, 20]
+
+
+@pytest.mark.asyncio
+async def test_clear_stops_mid_flight(chroma_mock):
+    chunks = [f"chunk{i}" for i in range(100)]
+    task = QueueTask(id="t1", filename="big.txt", category="student_manual", chunks=chunks)
+    svc = QueueService(chroma_mock)
+    svc._cancel_flag = True
+    await svc._process_task(task)
+    assert chroma_mock.upload.call_count == 0
