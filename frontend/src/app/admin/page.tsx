@@ -2,6 +2,8 @@
 
 import { useState, useCallback, FormEvent, useEffect, useRef, useDeferredValue } from "react";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
+import { useQueueStatus } from "@/hooks/useQueueStatus";
+import { QueueStatusBar } from "@/components/QueueStatusBar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,11 +34,7 @@ const CATEGORY_META: Record<
   },
 };
 
-interface UploadResult {
-  inserted: number;
-  skipped: number;
-  total: number;
-}
+
 
 interface StatsItem {
   category: string;
@@ -303,8 +301,14 @@ export default function AdminPage() {
   const isContentLarge = content.length > MAX_EDITOR_CHARS;
   const deferredContent = useDeferredValue(content);
   const [delimiter, setDelimiter] = useState("-----SPILIT_BY_HSUNR-----");
-  const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+
+  // ── Queue state ──
+  const { status: queueStatus, clearQueue } = useQueueStatus({
+    onIdle: () => {
+      showToast("队列任务已完成", "success");
+      loadStats();
+    },
+  });
 
   // ── Stats state ──
   const [stats, setStats] = useState<StatsItem[]>([]);
@@ -464,33 +468,35 @@ export default function AdminPage() {
         showToast("请输入或上传资料内容", "error");
         return;
       }
-      setUploading(true);
-      setUploadResult(null);
       try {
         const res = await fetch("/api/admin/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content, category, delimiter }),
         });
+        if (res.status === 409) {
+          showToast("队列繁忙，请等待当前任务完成", "error");
+          return;
+        }
         if (!res.ok) {
           const err = await res.text();
           showToast(`上传失败: ${err}`, "error");
           return;
         }
-        const result: UploadResult = await res.json();
-        setUploadResult(result);
-        showToast(
-          `上传成功！新增 ${result.inserted} 条，跳过 ${result.skipped} 条`,
-          "success",
-        );
-        loadStats();
+        const result = await res.json();
+        if (result.queued) {
+          showToast("文件已加入队列，后台处理中", "info");
+          // Clear upload form
+          setContent("");
+          setFileName("");
+          setFileSize(0);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
       } catch (err) {
         showToast(`网络错误: ${err}`, "error");
-      } finally {
-        setUploading(false);
       }
     },
-    [content, category, delimiter, loadStats, showToast],
+    [content, category, delimiter, showToast],
   );
 
   // ── Preview ──
@@ -1097,13 +1103,13 @@ export default function AdminPage() {
             <div className="flex flex-wrap items-center gap-4">
               <button
                 type="submit"
-                disabled={uploading || !content.trim()}
+                disabled={queueStatus.busy || !content.trim()}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-600 hover:shadow-md active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {uploading ? (
+                {queueStatus.busy ? (
                   <>
                     <IconSpinner />
-                    上传中...
+                    队列中有任务，请等待
                   </>
                 ) : (
                   <>
@@ -1113,25 +1119,13 @@ export default function AdminPage() {
                 )}
               </button>
 
-              {uploadResult && (
-                <div className="inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
-                  <IconCheck />
-                  <span>
-                    新增{" "}
-                    <span className="font-semibold">
-                      {uploadResult.inserted}
-                    </span>{" "}
-                    条，跳过{" "}
-                    <span className="font-semibold">
-                      {uploadResult.skipped}
-                    </span>{" "}
-                    条（共 {uploadResult.total} 段）
-                  </span>
-                </div>
-              )}
+
             </div>
           </form>
         </section>
+
+        {/* ═══ Queue Status ═══ */}
+        <QueueStatusBar status={queueStatus} onClear={clearQueue} />
 
         {/* ═══ Stats Section ═══ */}
         <section className="mb-8">
