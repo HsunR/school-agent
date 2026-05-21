@@ -170,11 +170,13 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
 
 # ── Answer node ──
 
+MAX_CHUNK_CHARS = 500
+
 async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
     """Generate the final answer using retrieved context, streaming tokens."""
     writer = get_stream_writer()
-    manual_chunks = state.get("manual_chunks", [])
-    forum_chunks = state.get("forum_chunks", [])
+    manual_chunks = [c[:MAX_CHUNK_CHARS] for c in state.get("manual_chunks", [])]
+    forum_chunks = [c[:MAX_CHUNK_CHARS] for c in state.get("forum_chunks", [])]
     manual_context = "\n\n".join(manual_chunks) if manual_chunks else "（未检索到相关内容）"
     forum_context = "\n\n".join(forum_chunks) if forum_chunks else "（未检索到相关内容）"
 
