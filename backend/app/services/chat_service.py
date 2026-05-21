@@ -61,7 +61,17 @@ class ChatService:
         self.embedding_client = EmbeddingClient(settings)
         self.chroma = ChromaManager(settings, self.embedding_client)
 
-        self.graph = compile_graph(self.routing_llm, self.chroma, self.chat_llm)
+        self.scoring_llm = ChatOpenAI(
+            model=settings.llm_scoring_model,
+            base_url=settings.llm_scoring_base_url,
+            api_key=settings.llm_scoring_api_key,
+            streaming=False,
+            timeout=15,
+        )
+
+        self.graph = compile_graph(
+            self.routing_llm, self.chroma, self.chat_llm, self.scoring_llm,
+        )
 
     def _to_langchain(self, messages: list[ChatMessage]) -> list[BaseMessage]:
         result: list[BaseMessage] = []
@@ -87,6 +97,7 @@ class ChatService:
             "search_query_forum": "",
             "manual_chunks": [],
             "forum_chunks": [],
+            "scored_chunks": [],
         }
 
         try:

@@ -73,7 +73,7 @@ class TestStreamChat:
     @pytest.mark.asyncio
     async def test_stream_chat_yields_typed_events(self):
         """stream_chat should yield typed SSE events from custom stream."""
-        settings = Settings()
+        settings = Settings(llm_scoring_api_key="test-key")
         service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
@@ -98,7 +98,7 @@ class TestStreamChat:
     @pytest.mark.asyncio
     async def test_stream_chat_skips_empty_tokens(self):
         """Empty tokens from answer_node should still be yielded (answer_node controls it)."""
-        settings = Settings()
+        settings = Settings(llm_scoring_api_key="test-key")
         service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
@@ -124,7 +124,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_stream_chat_re_raises_error(self):
         """Errors from graph.astream should yield an error event."""
-        settings = Settings()
+        settings = Settings(llm_scoring_api_key="test-key")
         service = ChatService(settings)
 
         async def _mock_astream(*args, **kwargs):
@@ -153,27 +153,28 @@ class TestTimeout:
         settings = Settings(llm_timeout=15)
         with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
             ChatService(settings)
-            assert mock_llm_cls.call_count == 2
-            for call_args in mock_llm_cls.call_args_list:
+            assert mock_llm_cls.call_count == 3
+            # chat and routing use llm_timeout; scoring uses hardcoded 15
+            for call_args in mock_llm_cls.call_args_list[:2]:
                 assert call_args.kwargs.get("timeout") == 15
 
     @pytest.mark.asyncio
     async def test_default_timeout_is_30(self):
         """Default llm_timeout should be 30."""
         with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
-            ChatService(Settings())
-            assert mock_llm_cls.call_count == 2
-            for call_args in mock_llm_cls.call_args_list:
+            ChatService(Settings(llm_scoring_api_key="test-key"))
+            assert mock_llm_cls.call_count == 3
+            for call_args in mock_llm_cls.call_args_list[:2]:
                 assert call_args.kwargs.get("timeout") == 30
 
     @pytest.mark.asyncio
     async def test_custom_timeout_value(self):
         """Custom timeout value should propagate correctly."""
-        settings = Settings(llm_timeout=60)
+        settings = Settings(llm_timeout=60, llm_scoring_api_key="test-key")
         with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
             ChatService(settings)
-            assert mock_llm_cls.call_count == 2
-            for call_args in mock_llm_cls.call_args_list:
+            assert mock_llm_cls.call_count == 3
+            for call_args in mock_llm_cls.call_args_list[:2]:
                 assert call_args.kwargs.get("timeout") == 60
 
     @pytest.mark.asyncio
