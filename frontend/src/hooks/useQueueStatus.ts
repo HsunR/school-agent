@@ -57,20 +57,25 @@ export function useQueueStatus(options?: UseQueueStatusOptions) {
 
   useEffect(() => {
     let active = true;
+    let wasBusy = false;
 
     const poll = async () => {
       const data = await fetchStatus();
       if (!active) return;
-      if (data && !data.busy && data.pending === 0) {
-        onIdleRef.current?.();
-        return;
+      if (data) {
+        if (wasBusy && !data.busy && data.pending === 0) {
+          onIdleRef.current?.();
+        }
+        wasBusy = data.busy;
       }
       if (active) {
         timeoutRef.current = setTimeout(poll, POLL_INTERVAL);
       }
     };
 
-    fetchStatus();
+    fetchStatus().then((data) => {
+      if (data) wasBusy = data.busy;
+    });
     timeoutRef.current = setTimeout(poll, POLL_INTERVAL);
 
     return () => {

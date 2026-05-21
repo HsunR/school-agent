@@ -55,19 +55,9 @@ describe("useQueueStatus", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it("stops polling when queue becomes idle", async () => {
+  it("keeps polling after queue becomes idle", async () => {
     const mockFetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          busy: true,
-          pending: 1,
-          current_task: "doc.txt",
-          progress: 5,
-          total: 50,
-        }),
-      })
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         ok: true,
         json: async () => ({
           busy: false,
@@ -81,12 +71,19 @@ describe("useQueueStatus", () => {
 
     renderHook(() => useQueueStatus());
 
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
     await act(async () => {
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2000);
     });
 
-    // After idle, no more fetches
     expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
   it("provides clearQueue function", async () => {
