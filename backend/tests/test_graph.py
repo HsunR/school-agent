@@ -129,6 +129,8 @@ class TestGraphInvocation:
         result = graph.invoke({"messages": [HumanMessage(content="test")]})
         assert result.get("search_manual") is False
         assert result.get("search_forum") is False
+        assert result.get("search_query_manual") == ""
+        assert result.get("search_query_forum") == ""
 
     @pytest.mark.asyncio
     async def test_ainvoke_returns_messages(self, mock_chroma):

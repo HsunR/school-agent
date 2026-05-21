@@ -16,18 +16,24 @@ from app.graph.graph import (
 def test_routing_node_parses_json():
     llm = MagicMock()
     llm.invoke.return_value = AIMessage(
-        content='{"search_manual": true, "search_forum": false}'
+        content='{"search_manual": true, "search_forum": false, '
+                '"search_query_manual": "宿舍 规定", '
+                '"search_query_forum": ""}'
     )
     state: ChatState = {
         "messages": [HumanMessage(content="What are the dorm rules?")],
         "search_manual": False,
         "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
         "manual_chunks": [],
         "forum_chunks": [],
     }
     result = routing_node(state, llm)
     assert result["search_manual"] is True
     assert result["search_forum"] is False
+    assert result["search_query_manual"] != ""
+    assert result["search_query_forum"] == ""
 
 
 def test_routing_node_fallback_on_bad_json():
@@ -37,12 +43,16 @@ def test_routing_node_fallback_on_bad_json():
         "messages": [HumanMessage(content="hi")],
         "search_manual": False,
         "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
         "manual_chunks": [],
         "forum_chunks": [],
     }
     result = routing_node(state, llm)
     assert result["search_manual"] is False
     assert result["search_forum"] is False
+    assert result["search_query_manual"] == ""
+    assert result["search_query_forum"] == ""
 
 
 def test_should_retrieve_manual_first():
@@ -50,6 +60,8 @@ def test_should_retrieve_manual_first():
         "messages": [],
         "search_manual": True,
         "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
         "manual_chunks": [],
         "forum_chunks": [],
     }
@@ -61,6 +73,8 @@ def test_should_retrieve_forum_after_manual():
         "messages": [],
         "search_manual": False,
         "search_forum": True,
+        "search_query_manual": "",
+        "search_query_forum": "",
         "manual_chunks": [],
         "forum_chunks": [],
     }
@@ -72,6 +86,8 @@ def test_should_retrieve_end_when_no_search():
         "messages": [],
         "search_manual": False,
         "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
         "manual_chunks": [],
         "forum_chunks": [],
     }

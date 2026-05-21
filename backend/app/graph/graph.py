@@ -36,10 +36,24 @@ ROUTING_SYSTEM_PROMPT = (
     "You are a routing classifier for a campus assistant. "
     "Given a user's question, determine whether it requires knowledge from:\n"
     "1. student_manual — the school's student handbook (rules, policies, procedures)\n"
-    "2. school_forum — the school's forum/bbs (campus life, events, gossip)\n"
-    "Respond with valid JSON only: "
-    '{"search_manual": true/false, "search_forum": true/false}. '
-    "Set each field to true if the question is relevant to that knowledge source."
+    "2. school_forum — the school's forum/bbs (campus life, events, gossip)\n\n"
+    "For each knowledge source that is relevant, generate an optimized search query "
+    "for vector retrieval. Extract key terms and reformulate specifically for that source.\n\n"
+    "Respond with valid JSON only:\n"
+    '{"search_manual": true/false, "search_forum": true/false,\n'
+    ' "search_query_manual": "...", "search_query_forum": "..."}\n\n'
+    "Examples:\n"
+    '- "旷课会不会被处分"\n'
+    '  → {"search_manual": true, "search_forum": false,\n'
+    '     "search_query_manual": "旷课 处分 规定 节数",\n'
+    '     "search_query_forum": ""}\n'
+    '- "旷课了能去食堂吃饭吗"\n'
+    '  → {"search_manual": true, "search_forum": true,\n'
+    '     "search_query_manual": "旷课 处分 规定",\n'
+    '     "search_query_forum": "食堂 吃饭 推荐"}\n'
+    '- "今天天气怎么样"\n'
+    '  → {"search_manual": false, "search_forum": false,\n'
+    '     "search_query_manual": "", "search_query_forum": ""}'
 )
 
 RETRIEVAL_CONTEXT_TEMPLATE = (
@@ -59,6 +73,8 @@ class ChatState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
     search_manual: bool
     search_forum: bool
+    search_query_manual: str
+    search_query_forum: str
     manual_chunks: list[str]
     forum_chunks: list[str]
 
@@ -78,15 +94,24 @@ def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
         parsed = json.loads(text)
         search_manual = bool(parsed.get("search_manual", False))
         search_forum = bool(parsed.get("search_forum", False))
+        search_query_manual = parsed.get("search_query_manual", "")
+        search_query_forum = parsed.get("search_query_forum", "")
     except (json.JSONDecodeError, AttributeError):
         logger.warning("Routing parse failed, defaulting to no search")
         search_manual = False
         search_forum = False
+        search_query_manual = ""
+        search_query_forum = ""
     logger.info(
         "Routing decision for '%s...': manual=%s, forum=%s",
         last_msg[:50], search_manual, search_forum,
     )
-    return {"search_manual": search_manual, "search_forum": search_forum}
+    return {
+        "search_manual": search_manual,
+        "search_forum": search_forum,
+        "search_query_manual": search_query_manual,
+        "search_query_forum": search_query_forum,
+    }
 
 
 def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
