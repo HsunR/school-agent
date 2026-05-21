@@ -89,9 +89,6 @@ def test_should_retrieve_manual_first():
         "search_forum": False,
         "search_query_manual": "",
         "search_query_forum": "",
-        "manual_chunks": [],
-        "forum_chunks": [],
-        "scored_chunks": [],
     }
     assert should_retrieve(state) == "manual_retrieval_node"
 
@@ -103,9 +100,6 @@ def test_should_retrieve_forum_after_manual():
         "search_forum": True,
         "search_query_manual": "",
         "search_query_forum": "",
-        "manual_chunks": [],
-        "forum_chunks": [],
-        "scored_chunks": [],
     }
     assert should_retrieve(state) == "forum_retrieval_node"
 
@@ -117,9 +111,6 @@ def test_should_retrieve_answer_node_when_no_search():
         "search_forum": False,
         "search_query_manual": "",
         "search_query_forum": "",
-        "manual_chunks": [],
-        "forum_chunks": [],
-        "scored_chunks": [],
     }
     assert should_retrieve(state) == "scoring_node"
 

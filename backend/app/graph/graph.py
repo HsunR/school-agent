@@ -239,7 +239,7 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
                     f"文本来源：{source}\n"
                     f"用户问题：{safe_question}\n"
                     f"文本内容：{safe_chunk}\n\n"
-                    f"注意：{source}类型文本，删除无关楼层/评论内容即可，其余一律保留原文。"
+                    f"注意：{source}类型文本，删除无关楼层/无关评论内容即可，其余一律保留原文。"
                 )),
             ])
             text = response.content.strip()
@@ -323,9 +323,9 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
 
 def should_retrieve(state: ChatState) -> str:
     """Return the next node: retrieval node or scoring_node."""
-    if state.get("search_manual") and not state.get("manual_chunks"):
+    if state.get("search_manual") and "manual_chunks" not in state:
         return "manual_retrieval_node"
-    if state.get("search_forum") and not state.get("forum_chunks"):
+    if state.get("search_forum") and "forum_chunks" not in state:
         return "forum_retrieval_node"
     return "scoring_node"
 

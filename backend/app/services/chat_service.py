@@ -95,9 +95,6 @@ class ChatService:
             "search_forum": False,
             "search_query_manual": "",
             "search_query_forum": "",
-            "manual_chunks": [],
-            "forum_chunks": [],
-            "scored_chunks": [],
         }
 
         try:
