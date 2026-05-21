@@ -4,6 +4,7 @@ import { useState, useCallback, FormEvent, useEffect, useRef, useDeferredValue }
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { useQueueStatus } from "@/hooks/useQueueStatus";
 import { QueueStatusBar } from "@/components/QueueStatusBar";
+import { TemperatureStatus } from "@/components/TemperatureStatus";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1126,6 +1127,9 @@ export default function AdminPage() {
 
         {/* ═══ Queue Status ═══ */}
         <QueueStatusBar status={queueStatus} onClear={clearQueue} />
+
+        {/* ═══ Temperature Status ═══ */}
+        <TemperatureStatus />
 
         {/* ═══ Stats Section ═══ */}
         <section className="mb-8">
