@@ -229,10 +229,14 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         score = 0
         compressed = ""
         try:
+            safe_question = user_question[:MAX_QUESTION_CHARS].replace("{", "{{").replace("}", "}}")
+            safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS].replace("{", "{{").replace("}", "}}")
             prompt = SCORING_PROMPT.format(
-                user_question=user_question[:MAX_QUESTION_CHARS],
-                chunk=chunk_text[:MAX_CHUNK_INPUT_CHARS],
+                user_question=safe_question,
+                chunk=safe_chunk,
             )
+            logger.debug("Scoring prompt for %s chunk %d: user_question=%.50s..., chunk=%.50s...",
+                         source_key, idx, user_question, chunk_text)
             response: AIMessage = scoring_llm.invoke([
                 SystemMessage(content=prompt),
             ])
@@ -241,6 +245,8 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
             parsed = json.loads(text)
             score = max(0, min(100, int(parsed.get("score", 0))))
             compressed = parsed.get("compressed", "")
+            logger.info("Scored %s chunk %d: score=%d, compressed_len=%d",
+                        source_key, idx, score, len(compressed))
         except Exception:
             logger.exception("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
             score = 0
