@@ -1,5 +1,7 @@
 """Integration tests for the admin API endpoints."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
 
@@ -118,3 +120,74 @@ async def test_delete_nonexistent_record_returns_zero(client: AsyncClient) -> No
     if resp.status_code == 200:
         data = resp.json()
         assert data["deleted"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Queue endpoint tests (mock QueueService)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_returns_202_when_queue_accepts(client: AsyncClient) -> None:
+    """Test that upload returns 202 Accepted when queue is free."""
+    with patch("app.api.admin._get_queue_service") as mock_get:
+        mock_svc = MagicMock()
+        mock_svc.enqueue = AsyncMock()
+        mock_get.return_value = mock_svc
+        resp = await client.post(
+            "/api/admin/upload",
+            json={"content": "chunk1\nchunk2", "category": "student_manual", "delimiter": "\n"},
+        )
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["queued"] is True
+    assert data["queue_size"] == 1
+
+
+@pytest.mark.asyncio
+async def test_upload_returns_409_when_queue_busy(client: AsyncClient) -> None:
+    """Test that upload returns 409 Conflict when queue is busy."""
+    with patch("app.api.admin._get_queue_service") as mock_get:
+        mock_svc = MagicMock()
+        mock_svc.enqueue = AsyncMock(side_effect=RuntimeError("Queue is busy"))
+        mock_get.return_value = mock_svc
+        resp = await client.post(
+            "/api/admin/upload",
+            json={"content": "some content", "category": "student_manual"},
+        )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_queue_status_endpoint(client: AsyncClient) -> None:
+    """Test GET /api/admin/queue returns queue status."""
+    with patch("app.api.admin._get_queue_service") as mock_get:
+        mock_svc = MagicMock()
+        mock_svc.get_status.return_value = {
+            "busy": True,
+            "pending": 1,
+            "current_task": "doc.txt",
+            "progress": 10,
+            "total": 50,
+        }
+        mock_get.return_value = mock_svc
+        resp = await client.get("/api/admin/queue")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["busy"] is True
+    assert data["pending"] == 1
+    assert data["current_task"] == "doc.txt"
+
+
+@pytest.mark.asyncio
+async def test_queue_clear_endpoint(client: AsyncClient) -> None:
+    """Test POST /api/admin/queue/clear calls clear and returns message."""
+    with patch("app.api.admin._get_queue_service") as mock_get:
+        mock_svc = MagicMock()
+        mock_svc.clear = MagicMock()
+        mock_get.return_value = mock_svc
+        resp = await client.post("/api/admin/queue/clear")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "message" in data
+    mock_svc.clear.assert_called_once()

@@ -1,6 +1,7 @@
 """Admin API router for knowledge base management."""
 
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,17 +13,20 @@ from app.schemas.admin import (
     ClearResponse,
     DataPreviewResponse,
     DeleteResponse,
+    QueueClearResponse,
+    QueueStatusResponse,
     StatsResponse,
     UploadRequest,
-    UploadResponse,
 )
+from app.services.queue_service import QueueService, QueueTask
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-# Lazy-init singleton
+# Lazy-init singletons
 _chroma: Optional[ChromaManager] = None
+_queue_service: Optional[QueueService] = None
 
 
 def _get_chroma() -> ChromaManager:
@@ -34,21 +38,34 @@ def _get_chroma() -> ChromaManager:
     return _chroma
 
 
-@router.post("/upload", response_model=UploadResponse)
-async def upload_data(request: UploadRequest) -> UploadResponse:
-    """Upload text content, split by delimiter, dedup, and store."""
+def _get_queue_service() -> QueueService:
+    global _queue_service
+    if _queue_service is None:
+        _queue_service = QueueService(_get_chroma())
+    return _queue_service
+
+
+@router.post("/upload", status_code=202)
+async def upload_data(request: UploadRequest) -> dict:
+    """Upload text content — split by delimiter and enqueue for async processing."""
     chunks = request.content.split(request.delimiter)
     chunks = [c.strip() for c in chunks if c.strip()]
     if not chunks:
         raise HTTPException(status_code=400, detail="No valid chunks after splitting")
 
-    chroma = _get_chroma()
-    result = chroma.upload(request.category, chunks)
-    return UploadResponse(
-        inserted=result["inserted"],
-        skipped=result["skipped"],
-        total=len(chunks),
+    queue = _get_queue_service()
+    task = QueueTask(
+        id=str(uuid.uuid4()),
+        filename=f"{request.category[:20]}_{uuid.uuid4().hex[:8]}",
+        category=request.category,
+        chunks=chunks,
     )
+    try:
+        await queue.enqueue(task)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    return {"queued": True, "queue_size": 1}
 
 
 @router.get("/data", response_model=DataPreviewResponse)
@@ -109,3 +126,19 @@ async def get_stats() -> list[StatsResponse]:
         except Exception:
             results.append(StatsResponse(category=cat, total_count=0))
     return results
+
+
+@router.get("/queue", response_model=QueueStatusResponse)
+async def get_queue_status() -> QueueStatusResponse:
+    """Get current queue status (busy, pending, current task, progress)."""
+    queue = _get_queue_service()
+    status = queue.get_status()
+    return QueueStatusResponse(**status)
+
+
+@router.post("/queue/clear", response_model=QueueClearResponse)
+async def clear_queue() -> QueueClearResponse:
+    """Clear all pending tasks after current task completes."""
+    queue = _get_queue_service()
+    queue.clear()
+    return QueueClearResponse(message="Queue cleared. Current task will finish before queue is emptied.")
