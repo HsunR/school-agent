@@ -235,7 +235,12 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
                          source_key, idx, user_question, chunk_text)
             response: AIMessage = scoring_llm.invoke([
                 SystemMessage(content=SCORING_SYSTEM_PROMPT),
-                HumanMessage(content=f"用户问题：{safe_question}\n文本内容：{safe_chunk}"),
+                HumanMessage(content=(
+                    f"文本来源：{source}\n"
+                    f"用户问题：{safe_question}\n"
+                    f"文本内容：{safe_chunk}\n\n"
+                    f"注意：{source}类型文本，删除无关楼层/评论内容即可，其余一律保留原文。"
+                )),
             ])
             text = response.content.strip()
             text = text.removeprefix("```json").removesuffix("```").strip()

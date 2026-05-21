@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 
 interface DetailModalProps {
   content: string;
@@ -10,6 +10,9 @@ interface DetailModalProps {
 }
 
 export default function DetailModal({ content, original, source, onClose }: DetailModalProps) {
+  const [tab, setTab] = useState<"compressed" | "original">("compressed");
+  const hasBoth = original && original !== content;
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -21,8 +24,6 @@ export default function DetailModal({ content, original, source, onClose }: Deta
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
-
-  const hasExtracted = original !== undefined && content !== original;
 
   return (
     <div
@@ -48,27 +49,40 @@ export default function DetailModal({ content, original, source, onClose }: Deta
           </button>
         </div>
 
-        {hasExtracted && (
-          <div className="mb-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
-              提取后内容
-            </h3>
-            <div className="whitespace-pre-wrap rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-relaxed text-gray-700">
-              {content}
-            </div>
+        {hasBoth && (
+          <div className="mb-3 flex gap-2 border-b border-gray-200 pb-2">
+            <button
+              onClick={() => setTab("compressed")}
+              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                tab === "compressed"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              提取后
+            </button>
+            <button
+              onClick={() => setTab("original")}
+              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                tab === "original"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              原文
+            </button>
           </div>
         )}
 
-        <div>
-          {hasExtracted && (
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              原文
-            </h3>
-          )}
+        {tab === "compressed" ? (
           <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-            {hasExtracted ? original : content}
+            {content}
           </div>
-        </div>
+        ) : (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-500">
+            {original}
+          </div>
+        )}
       </div>
     </div>
   );
