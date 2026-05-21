@@ -1,18 +1,20 @@
 """LangGraph state graph definition for the conversational agent.
 
 Graph:
-    START → routing_node
-              │
-              ▼ (should_retrieve)
-         ┌────┴────┐
-    manual_node  forum_node  (or answer_node if neither)
-         │           │
-         └─────┬─────┘
-               ▼
-          answer_node
-               │
-               ▼
-              END
+    START -> routing_node
+              |
+              v (should_retrieve)
+         +----+----+
+    manual_node  forum_node  (or scoring_node if neither)
+         |           |
+         +-----+-----+
+               |
+         scoring_node
+               |
+           answer_node
+               |
+              v
+             END
 
 Nodes emit typed events via ``get_stream_writer()`` for SSE streaming.
 """
@@ -66,6 +68,19 @@ RETRIEVAL_CONTEXT_TEMPLATE = (
     "请用中文回答。"
 )
 
+SCORING_PROMPT = (
+    "你是一个校园助手的内容过滤器。你的任务：\n"
+    "1. 给你一段文本和一个用户问题\n"
+    "2. 判断文本是否与用户问题相关，打分 0-100\n"
+    "3. 裁剪掉完全无关的内容，保留与问题相关的部分\n"
+    "4. 如果文本中涉及日期等时间信息，务必保留\n"
+    "5. 如果整段文本与问题无关，打 0 分，压缩内容留空\n\n"
+    "输出必须是以下 JSON 格式，不要添加任何额外内容：\n"
+    '{{"score": 85, "compressed": "保留的关键内容"}}\n\n'
+    "用户问题：{user_question}\n"
+    "文本内容：{chunk}"
+)
+
 
 # ── State ──
 
@@ -79,6 +94,7 @@ class ChatState(TypedDict):
     search_query_forum: str
     manual_chunks: list[str]
     forum_chunks: list[str]
+    scored_chunks: list[dict]
 
 
 # ── Nodes ──
@@ -138,7 +154,7 @@ def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"manual_chunks": []}
     chunks = chroma.retrieve(COLLECTION_MANUAL, query)
     logger.info("Manual retrieval: %d chunks", len(chunks))
-    previews = [{"preview": c[:200], "source": "学生手册"} for c in chunks]
+    previews = [{"preview": c, "source": "学生手册"} for c in chunks]
     writer({
         "type": "retrieval",
         "source": "student_manual",
@@ -158,7 +174,7 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"forum_chunks": []}
     chunks = chroma.retrieve(COLLECTION_FORUM, query)
     logger.info("Forum retrieval: %d chunks", len(chunks))
-    previews = [{"preview": c[:200], "source": "学校贴吧"} for c in chunks]
+    previews = [{"preview": c, "source": "学校贴吧"} for c in chunks]
     writer({
         "type": "retrieval",
         "source": "school_forum",
@@ -168,17 +184,95 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     return {"forum_chunks": chunks}
 
 
-# ── Answer node ──
+# ── Scoring node ──
 
-MAX_CHUNK_CHARS = 500
+def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
+    """Score and compress each retrieved chunk for relevance."""
+    writer = get_stream_writer()
+    manual_chunks = state.get("manual_chunks", [])
+    forum_chunks = state.get("forum_chunks", [])
+    all_chunks: list[tuple[str, str]] = []
+    for c in manual_chunks:
+        all_chunks.append((c, "学生手册"))
+    for c in forum_chunks:
+        all_chunks.append((c, "学校贴吧"))
+
+    if not all_chunks:
+        writer({"type": "scoring", "source": "done", "done": True})
+        return {"scored_chunks": []}
+
+    user_question = state["messages"][-1].content if state["messages"] else ""
+    scored_chunks: list[dict] = []
+    source_counters: dict[str, int] = {}
+
+    for chunk_text, source in all_chunks:
+        source_key = "student_manual" if source == "学生手册" else "school_forum"
+        idx = source_counters.get(source_key, 0)
+        source_counters[source_key] = idx + 1
+
+        score = 0
+        compressed = ""
+        try:
+            prompt = SCORING_PROMPT.format(
+                user_question=user_question[:500],
+                chunk=chunk_text[:2000],
+            )
+            response: AIMessage = scoring_llm.invoke([
+                SystemMessage(content=prompt),
+            ])
+            text = response.content.strip()
+            text = text.removeprefix("```json").removesuffix("```").strip()
+            parsed = json.loads(text)
+            score = max(0, min(100, int(parsed.get("score", 0))))
+            compressed = parsed.get("compressed", "")
+        except Exception:
+            logger.warning("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
+            score = 0
+            compressed = ""
+
+        scored_chunks.append({
+            "original": chunk_text,
+            "source": source,
+            "score": score,
+            "compressed": compressed,
+        })
+        writer({
+            "type": "scoring",
+            "source": source_key,
+            "index": idx,
+            "score": score,
+            "compressed": compressed,
+        })
+
+    writer({"type": "scoring", "source": "done", "done": True})
+    return {"scored_chunks": scored_chunks}
+
+
+# ── Answer node ──
 
 async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
     """Generate the final answer using retrieved context, streaming tokens."""
     writer = get_stream_writer()
-    manual_chunks = [c[:MAX_CHUNK_CHARS] for c in state.get("manual_chunks", [])]
-    forum_chunks = [c[:MAX_CHUNK_CHARS] for c in state.get("forum_chunks", [])]
-    manual_context = "\n\n".join(manual_chunks) if manual_chunks else "（未检索到相关内容）"
-    forum_context = "\n\n".join(forum_chunks) if forum_chunks else "（未检索到相关内容）"
+    scored = state.get("scored_chunks", [])
+    manual_chunks = state.get("manual_chunks", [])
+    forum_chunks = state.get("forum_chunks", [])
+
+    if scored:
+        manual_context = "\n\n".join(
+            c["compressed"][:500] for c in scored
+            if c["source"] == "学生手册" and c["score"] > 0 and c["compressed"]
+        )
+        forum_context = "\n\n".join(
+            c["compressed"][:500] for c in scored
+            if c["source"] == "学校贴吧" and c["score"] > 0 and c["compressed"]
+        )
+        if not manual_context:
+            manual_context = "（未检索到相关内容）"
+        if not forum_context:
+            forum_context = "（未检索到相关内容）"
+    else:
+        manual_context = "\n\n".join(manual_chunks) if manual_chunks else "（未检索到相关内容）"
+        forum_context = "\n\n".join(forum_chunks) if forum_chunks else "（未检索到相关内容）"
 
     has_context = bool(manual_chunks or forum_chunks)
     messages = list(state["messages"])
@@ -204,12 +298,12 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
 # ── Conditional edge ──
 
 def should_retrieve(state: ChatState) -> str:
-    """Return the next node: retrieval node or answer_node."""
+    """Return the next node: retrieval node or scoring_node."""
     if state.get("search_manual") and not state.get("manual_chunks"):
         return "manual_retrieval_node"
     if state.get("search_forum") and not state.get("forum_chunks"):
         return "forum_retrieval_node"
-    return "answer_node"
+    return "scoring_node"
 
 
 # ── Graph builder ──
@@ -218,6 +312,7 @@ def compile_graph(
     routing_llm: BaseChatModel,
     chroma: ChromaManager,
     chat_llm: BaseChatModel,
+    scoring_llm: BaseChatModel,
 ) -> StateGraph:
     """Build and compile the LangGraph state graph.
 
@@ -225,6 +320,7 @@ def compile_graph(
         routing_llm: The LLM instance for the routing node.
         chroma: The ChromaDB manager instance.
         chat_llm: The LLM instance for the answer node (streaming).
+        scoring_llm: The LLM instance for the scoring node.
 
     Returns:
         A compiled ``StateGraph``.
@@ -234,6 +330,7 @@ def compile_graph(
     builder.add_node("routing_node", lambda state: routing_node(state, routing_llm))
     builder.add_node("manual_retrieval_node", lambda state: manual_retrieval_node(state, chroma))
     builder.add_node("forum_retrieval_node", lambda state: forum_retrieval_node(state, chroma))
+    builder.add_node("scoring_node", lambda state: scoring_node(state, scoring_llm))
 
     async def _answer_node(state):
         return await answer_node(state, chat_llm)
@@ -244,13 +341,14 @@ def compile_graph(
     builder.add_conditional_edges("routing_node", should_retrieve, {
         "manual_retrieval_node": "manual_retrieval_node",
         "forum_retrieval_node": "forum_retrieval_node",
-        "answer_node": "answer_node",
+        "scoring_node": "scoring_node",
     })
     builder.add_conditional_edges("manual_retrieval_node", should_retrieve, {
         "forum_retrieval_node": "forum_retrieval_node",
-        "answer_node": "answer_node",
+        "scoring_node": "scoring_node",
     })
-    builder.add_edge("forum_retrieval_node", "answer_node")
+    builder.add_edge("forum_retrieval_node", "scoring_node")
+    builder.add_edge("scoring_node", "answer_node")
     builder.add_edge("answer_node", END)
 
     return builder.compile()
