@@ -81,6 +81,22 @@ SCORING_PROMPT = (
     "文本内容：{chunk}"
 )
 
+# ── Constants ──
+
+SOURCE_MANUAL_LABEL = "学生手册"
+SOURCE_FORUM_LABEL = "学校贴吧"
+SOURCE_MANUAL_KEY = "student_manual"
+SOURCE_FORUM_KEY = "school_forum"
+
+SOURCE_LABEL_TO_KEY = {
+    SOURCE_MANUAL_LABEL: SOURCE_MANUAL_KEY,
+    SOURCE_FORUM_LABEL: SOURCE_FORUM_KEY,
+}
+
+MAX_QUESTION_CHARS = 500
+MAX_CHUNK_INPUT_CHARS = 2000
+MAX_COMPRESSED_CHARS = 500
+
 
 # ── State ──
 
@@ -154,10 +170,10 @@ def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"manual_chunks": []}
     chunks = chroma.retrieve(COLLECTION_MANUAL, query)
     logger.info("Manual retrieval: %d chunks", len(chunks))
-    previews = [{"preview": c, "source": "学生手册"} for c in chunks]
+    previews = [{"preview": c, "source": SOURCE_MANUAL_LABEL} for c in chunks]
     writer({
         "type": "retrieval",
-        "source": "student_manual",
+        "source": SOURCE_MANUAL_KEY,
         "label": "已检索到【学生手册】相关规定" if chunks else "【学生手册】未检索到相关内容",
         "chunks": previews,
     })
@@ -174,10 +190,10 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"forum_chunks": []}
     chunks = chroma.retrieve(COLLECTION_FORUM, query)
     logger.info("Forum retrieval: %d chunks", len(chunks))
-    previews = [{"preview": c, "source": "学校贴吧"} for c in chunks]
+    previews = [{"preview": c, "source": SOURCE_FORUM_LABEL} for c in chunks]
     writer({
         "type": "retrieval",
-        "source": "school_forum",
+        "source": SOURCE_FORUM_KEY,
         "label": "已检索到【学校贴吧】相关讨论" if chunks else "【学校贴吧】未检索到相关内容",
         "chunks": previews,
     })
@@ -193,9 +209,9 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
     forum_chunks = state.get("forum_chunks", [])
     all_chunks: list[tuple[str, str]] = []
     for c in manual_chunks:
-        all_chunks.append((c, "学生手册"))
+        all_chunks.append((c, SOURCE_MANUAL_LABEL))
     for c in forum_chunks:
-        all_chunks.append((c, "学校贴吧"))
+        all_chunks.append((c, SOURCE_FORUM_LABEL))
 
     if not all_chunks:
         writer({"type": "scoring", "source": "done", "done": True})
@@ -206,7 +222,7 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
     source_counters: dict[str, int] = {}
 
     for chunk_text, source in all_chunks:
-        source_key = "student_manual" if source == "学生手册" else "school_forum"
+        source_key = SOURCE_LABEL_TO_KEY[source]
         idx = source_counters.get(source_key, 0)
         source_counters[source_key] = idx + 1
 
@@ -214,8 +230,8 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         compressed = ""
         try:
             prompt = SCORING_PROMPT.format(
-                user_question=user_question[:500],
-                chunk=chunk_text[:2000],
+                user_question=user_question[:MAX_QUESTION_CHARS],
+                chunk=chunk_text[:MAX_CHUNK_INPUT_CHARS],
             )
             response: AIMessage = scoring_llm.invoke([
                 SystemMessage(content=prompt),
@@ -226,7 +242,7 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
             score = max(0, min(100, int(parsed.get("score", 0))))
             compressed = parsed.get("compressed", "")
         except Exception:
-            logger.warning("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
+            logger.exception("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
             score = 0
             compressed = ""
 
@@ -259,12 +275,12 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
 
     if scored:
         manual_context = "\n\n".join(
-            c["compressed"][:500] for c in scored
-            if c["source"] == "学生手册" and c["score"] > 0 and c["compressed"]
+            c["compressed"][:MAX_COMPRESSED_CHARS] for c in scored
+            if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]
         )
         forum_context = "\n\n".join(
-            c["compressed"][:500] for c in scored
-            if c["source"] == "学校贴吧" and c["score"] > 0 and c["compressed"]
+            c["compressed"][:MAX_COMPRESSED_CHARS] for c in scored
+            if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0 and c["compressed"]
         )
         if not manual_context:
             manual_context = "（未检索到相关内容）"
