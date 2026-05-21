@@ -33,8 +33,14 @@ class TestCpuTemperature:
         assert abs(temp - 31.85) < 0.01
 
     def test_cpu_temp_returns_none_when_wmi_unavailable(self, monkeypatch):
+        import builtins
+        original_import = builtins.__import__
+        def mock_import(name, *args, **kwargs):
+            if name == "wmi":
+                raise ImportError("No module named wmi")
+            return original_import(name, *args, **kwargs)
+        monkeypatch.setattr(builtins, "__import__", mock_import)
         monitor = TemperatureMonitor()
-        monkeypatch.setattr(monitor, "get_cpu_temp", lambda: None)
         assert monitor.get_cpu_temp() is None
 
     def test_cpu_temp_returns_none_wmi_query_fails(self, monkeypatch):
