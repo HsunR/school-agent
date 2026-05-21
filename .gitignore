@@ -53,9 +53,6 @@ Desktop.ini
 # OpenCode internal tracking
 .sisyphus/
 
-# Design docs & plans
-docs/superpowers/
-
 # Auto-generated
 next-env.d.ts
 frontend/next-env.d.ts
@@ -66,3 +63,9 @@ frontend/next-env.d.ts
 
 # Third-party sensor DLLs
 backend/app/services/sensors/
+
+# ChromaDB persistent storage
+backend/chroma_db/
+
+# Design docs & plans
+docs/
