@@ -18,10 +18,3 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., min_length=1)
     stream: bool = True
 
-
-class ChatResponse(BaseModel):
-    """Response payload for streaming chat completion chunks."""
-
-    token: str = ""
-    done: bool = False
-    error: Optional[str] = None

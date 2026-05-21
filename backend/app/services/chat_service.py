@@ -1,7 +1,7 @@
 """Chat service using LangChain with RAG support.
 
-Runs the LangGraph pipeline for routing + retrieval, then streams
-the final answer directly via ``llm.astream()`` for proper per-token SSE.
+Runs the LangGraph pipeline via ``graph.astream()``, parsing node
+updates and message tokens into typed SSE events (status/retrieval/token/error).
 """
 
 import json
@@ -36,8 +36,8 @@ _ROLE_MAP: dict[str, type[BaseMessage]] = {
 class ChatService:
     """Service for handling chat interactions with optional RAG.
 
-    Uses a LangGraph pipeline for routing + retrieval decisions, then
-    streams the LLM answer token-by-token via ``astream()``.
+    Uses ``graph.astream(["updates", "messages"])`` to emit
+    multi-stage SSE events: status → retrieval → token stream.
     """
 
     def __init__(self, settings: Settings) -> None:

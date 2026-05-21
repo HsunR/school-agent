@@ -205,6 +205,43 @@ class TestGraphInvocation:
         called_query = mock_chroma.retrieve.call_args[0][1]
         assert called_query == "旷课 处分 规定"
 
+    @pytest.mark.asyncio
+    async def test_astream_produces_token_events_for_answer(self, mock_chroma):
+        """graph.astream(messages) should yield token events from answer_node."""
+        # Use separate models: routing non-streaming, chat streaming (matches real setup)
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, mock_chroma, chat_llm)
+
+        state = {
+            "messages": [HumanMessage(content="test")],
+            "search_manual": False,
+            "search_forum": False,
+            "search_query_manual": "",
+            "search_query_forum": "",
+            "manual_chunks": [],
+            "forum_chunks": [],
+        }
+
+        token_events = []
+        async for event_type, event_data in graph.astream(
+            state,
+            stream_mode=["updates", "messages"],
+        ):
+            if event_type == "messages":
+                msg_chunk, metadata = event_data
+                if isinstance(msg_chunk, AIMessageChunk) and msg_chunk.content:
+                    token_events.append(msg_chunk.content)
+
+        # The answer_node uses chat_llm.invoke() with streaming=True
+        # MockStreamingChatModel._stream yields ["Hello", " ", "World", "!"]
+        # These should be captured as individual token events
+        assert len(token_events) > 0, "Expected at least one token event from answer_node"
+        assert "".join(token_events) == "Hello World!", (
+            f"Expected 'Hello World!', got {''.join(token_events)!r}"
+        )
+
     def test_conversation_context_preserved(self, mock_chroma):
         """Graph should preserve prior conversation context (messages pass through)."""
         llm = MockStreamingChatModel()
