@@ -273,7 +273,7 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
     manual_chunks = state.get("manual_chunks", [])
     forum_chunks = state.get("forum_chunks", [])
 
-    if scored:
+    if scored and any(c["score"] > 0 and c["compressed"] for c in scored):
         manual_context = "\n\n".join(
             c["compressed"][:MAX_COMPRESSED_CHARS] for c in scored
             if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]

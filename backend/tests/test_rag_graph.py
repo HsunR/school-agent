@@ -1,9 +1,9 @@
 """Tests for the RAG-enabled LangGraph pipeline."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk, SystemMessage
 
 from app.graph.graph import (
     ChatState,
@@ -183,3 +183,36 @@ def test_scoring_node_fallback_on_llm_error(mock_writer):
     assert len(result["scored_chunks"]) == 1
     assert result["scored_chunks"][0]["score"] == 0
     assert result["scored_chunks"][0]["compressed"] == ""
+
+
+@patch("app.graph.graph.get_stream_writer")
+@pytest.mark.asyncio
+async def test_answer_node_falls_back_to_raw_chunks_when_all_scores_zero(mock_writer):
+    """answer_node should use raw chunks when all scored_chunks have score 0."""
+    from app.graph.graph import answer_node
+
+    chat_llm = MagicMock()
+    async def _mock_astream(messages):
+        # Capture the context from the system message
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                assert "宿舍管理费每学期500元" in msg.content, (
+                    "Expected raw chunk content in context, got: %s", msg.content
+                )
+        yield AIMessageChunk(content="Hello World!")
+    chat_llm.astream = _mock_astream
+
+    state = {
+        "messages": [HumanMessage(content="宿舍管理费多少")],
+        "search_manual": True,
+        "search_forum": False,
+        "search_query_manual": "宿舍",
+        "search_query_forum": "",
+        "manual_chunks": ["宿舍管理费每学期500元"],
+        "forum_chunks": [],
+        "scored_chunks": [
+            {"original": "宿舍管理费每学期500元", "source": "学生手册", "score": 0, "compressed": ""},
+        ],
+    }
+    result = await answer_node(state, chat_llm)
+    assert "messages" in result
