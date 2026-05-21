@@ -25,7 +25,7 @@ from typing import Annotated, Sequence, TypedDict
 
 import operator
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
@@ -68,7 +68,7 @@ RETRIEVAL_CONTEXT_TEMPLATE = (
     "请用中文回答。"
 )
 
-SCORING_PROMPT = (
+SCORING_SYSTEM_PROMPT = (
     "你是一个校园助手的内容过滤器。你的任务：\n"
     "1. 给你一段文本和一个用户问题\n"
     "2. 判断文本是否与用户问题相关，打分 0-100\n"
@@ -76,9 +76,7 @@ SCORING_PROMPT = (
     "4. 如果文本中涉及日期等时间信息，务必保留\n"
     "5. 如果整段文本与问题无关，打 0 分，压缩内容留空\n\n"
     "输出必须是以下 JSON 格式，不要添加任何额外内容：\n"
-    '{{"score": 85, "compressed": "保留的关键内容"}}\n\n'
-    "用户问题：{user_question}\n"
-    "文本内容：{chunk}"
+    '{"score": 85, "compressed": "保留的关键内容"}'
 )
 
 # ── Constants ──
@@ -231,14 +229,11 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         try:
             safe_question = user_question[:MAX_QUESTION_CHARS].replace("{", "{{").replace("}", "}}")
             safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS].replace("{", "{{").replace("}", "}}")
-            prompt = SCORING_PROMPT.format(
-                user_question=safe_question,
-                chunk=safe_chunk,
-            )
             logger.debug("Scoring prompt for %s chunk %d: user_question=%.50s..., chunk=%.50s...",
                          source_key, idx, user_question, chunk_text)
             response: AIMessage = scoring_llm.invoke([
-                SystemMessage(content=prompt),
+                SystemMessage(content=SCORING_SYSTEM_PROMPT),
+                HumanMessage(content=f"用户问题：{safe_question}\n文本内容：{safe_chunk}"),
             ])
             text = response.content.strip()
             text = text.removeprefix("```json").removesuffix("```").strip()
