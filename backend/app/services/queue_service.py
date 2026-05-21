@@ -38,6 +38,7 @@ class QueueService:
         self._chroma = chroma_manager
         self._queue: asyncio.Queue[QueueTask] = asyncio.Queue()
         self._busy = False
+        self._lock = asyncio.Lock()
         self._cancel_flag = False
         self._current_task: QueueTask | None = None
         self._chunk_progress = 0
@@ -46,9 +47,10 @@ class QueueService:
 
     async def enqueue(self, task: QueueTask) -> None:
         """Add a task to the queue. Raises ``RuntimeError`` if busy or non-empty."""
-        if self._busy or not self._queue.empty():
-            raise RuntimeError("Queue is busy, please wait for current task to complete")
-        await self._queue.put(task)
+        async with self._lock:
+            if self._busy or not self._queue.empty():
+                raise RuntimeError("Queue is busy, please wait for current task to complete")
+            await self._queue.put(task)
         if self._worker_task is None or self._worker_task.done():
             self._worker_task = asyncio.create_task(self._worker_loop())
         logger.info("Task '%s' enqueued (%d chunks)", task.filename, len(task.chunks))
