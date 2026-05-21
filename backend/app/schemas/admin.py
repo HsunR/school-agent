@@ -51,3 +51,19 @@ class ClearResponse(BaseModel):
     """Response after clearing a collection."""
 
     cleared: list[str]
+
+
+class QueueStatusResponse(BaseModel):
+    """Response for queue status endpoint."""
+
+    busy: bool
+    pending: int = 0
+    current_task: Optional[str] = None
+    progress: int = 0
+    total: int = 0
+
+
+class QueueClearResponse(BaseModel):
+    """Response for queue clear endpoint."""
+
+    message: str
