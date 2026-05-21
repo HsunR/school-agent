@@ -67,3 +67,10 @@ class QueueClearResponse(BaseModel):
     """Response for queue clear endpoint."""
 
     message: str
+
+
+class TemperatureResponse(BaseModel):
+    """Response for CPU/GPU temperature endpoint."""
+
+    cpu_temp: float | None = None
+    gpu_temp: float | None = None

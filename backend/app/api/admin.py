@@ -16,9 +16,11 @@ from app.schemas.admin import (
     QueueClearResponse,
     QueueStatusResponse,
     StatsResponse,
+    TemperatureResponse,
     UploadRequest,
 )
 from app.services.queue_service import QueueService, QueueTask
+from app.services.temperature_monitor import TemperatureMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 # Lazy-init singletons
 _chroma: Optional[ChromaManager] = None
 _queue_service: Optional[QueueService] = None
+_temp_monitor: Optional[TemperatureMonitor] = None
 
 
 def _get_chroma() -> ChromaManager:
@@ -43,6 +46,13 @@ def _get_queue_service() -> QueueService:
     if _queue_service is None:
         _queue_service = QueueService(_get_chroma())
     return _queue_service
+
+
+def _get_temp_monitor() -> TemperatureMonitor:
+    global _temp_monitor
+    if _temp_monitor is None:
+        _temp_monitor = TemperatureMonitor()
+    return _temp_monitor
 
 
 @router.post("/upload", status_code=202)
@@ -142,3 +152,13 @@ async def clear_queue() -> QueueClearResponse:
     queue = _get_queue_service()
     queue.clear()
     return QueueClearResponse(message="Queue cleared. Current task will finish before queue is emptied.")
+
+
+@router.get("/temperature", response_model=TemperatureResponse)
+async def get_temperature() -> TemperatureResponse:
+    """Get current CPU and GPU temperatures in °C."""
+    monitor = _get_temp_monitor()
+    return TemperatureResponse(
+        cpu_temp=monitor.get_cpu_temp(),
+        gpu_temp=monitor.get_gpu_temp(),
+    )
