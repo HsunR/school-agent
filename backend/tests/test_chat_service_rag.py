@@ -1,4 +1,4 @@
-"""Tests for the RAG-enabled ChatService (multi-stage SSE output)."""
+"""Tests for the RAG-enabled ChatService (multi-stage SSE output via custom stream)."""
 
 import json
 
@@ -19,12 +19,9 @@ def service(settings):
 async def test_stream_chat_emits_status_and_token(service):
     """stream_chat emits status then token events when no RAG."""
     async def _mock_astream(*args, **kwargs):
-        yield "updates", {"routing_node": {
-            "search_manual": False, "search_forum": False,
-            "search_query_manual": "", "search_query_forum": "",
-        }}
-        yield "messages", (AIMessageChunk(content="Hello"), {})
-        yield "messages", (AIMessageChunk(content=" world"), {})
+        yield {"type": "status", "node": "routing", "label": "Analyzing...", "decision": {"search_manual": False, "search_forum": False}}
+        yield {"type": "token", "token": "Hello"}
+        yield {"type": "token", "token": " world"}
 
     service.graph.astream = _mock_astream
 
@@ -44,14 +41,9 @@ async def test_stream_chat_emits_status_and_token(service):
 async def test_stream_chat_with_rag_context(service):
     """When RAG context is retrieved, retrieval event is emitted."""
     async def _mock_astream(*args, **kwargs):
-        yield "updates", {"routing_node": {
-            "search_manual": True, "search_forum": False,
-            "search_query_manual": "dorm rules", "search_query_forum": "",
-        }}
-        yield "updates", {"manual_retrieval_node": {
-            "manual_chunks": ["Dorm rules: quiet hours 10pm"],
-        }}
-        yield "messages", (AIMessageChunk(content="test"), {})
+        yield {"type": "status", "node": "routing", "label": "Analyzing...", "decision": {"search_manual": True, "search_forum": False}}
+        yield {"type": "retrieval", "source": "student_manual", "label": "已检索到相关规定", "chunks": [{"preview": "Dorm rules: quiet hours 10pm", "source": "学生手册"}]}
+        yield {"type": "token", "token": "test"}
 
     service.graph.astream = _mock_astream
 

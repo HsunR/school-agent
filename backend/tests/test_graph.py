@@ -7,7 +7,7 @@ Tests cover:
 """
 
 from typing import TypedDict, Annotated, Sequence
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, AIMessageChunk, SystemMessage
@@ -120,74 +120,72 @@ class TestGraphStructure:
 class TestGraphInvocation:
     """Graph should correctly route messages and set search flags."""
 
-    def test_invoke_returns_messages(self, mock_chroma):
-        """Graph invoke should return a dict with 'messages' key."""
-        llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm)
-        result = graph.invoke({"messages": [HumanMessage(content="test")]})
-        assert isinstance(result, dict)
-        assert "messages" in result
-
-    def test_invoke_sets_search_flags(self, mock_chroma):
-        """Graph should set search_manual and search_forum to False by default
-        when routing can't parse the LLM response as valid JSON."""
-        llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm)
-        result = graph.invoke({"messages": [HumanMessage(content="test")]})
-        assert result.get("search_manual") is False
-        assert result.get("search_forum") is False
-        assert result.get("search_query_manual") == ""
-        assert result.get("search_query_forum") == ""
-
     @pytest.mark.asyncio
     async def test_ainvoke_returns_messages(self, mock_chroma):
-        """Async invoke should also return messages."""
+        """Graph ainvoke should return a dict with 'messages' key."""
         llm = MockStreamingChatModel()
         graph = compile_graph(llm, mock_chroma, llm)
         result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
         assert isinstance(result, dict)
         assert "messages" in result
 
-    def test_invoke_with_system_message(self, mock_chroma):
+    @pytest.mark.asyncio
+    async def test_ainvoke_sets_search_flags(self, mock_chroma):
+        """Graph should set search flags to False when routing can't parse JSON."""
+        llm = MockStreamingChatModel()
+        graph = compile_graph(llm, mock_chroma, llm)
+        result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
+        assert result.get("search_manual") is False
+        assert result.get("search_forum") is False
+        assert result.get("search_query_manual") == ""
+        assert result.get("search_query_forum") == ""
+
+    @pytest.mark.asyncio
+    async def test_ainvoke_with_system_message(self, mock_chroma):
         """Graph should work with system + user messages."""
         llm = MockStreamingChatModel()
         graph = compile_graph(llm, mock_chroma, llm)
-        result = graph.invoke({
+        result = await graph.ainvoke({
             "messages": [
                 SystemMessage(content="Be concise"),
                 HumanMessage(content="test"),
             ],
         })
-        # Messages pass through, plus an AIMessage from answer_node
         assert len(result["messages"]) == 3
         assert result["messages"][0].content == "Be concise"
         assert result["messages"][1].content == "test"
         assert isinstance(result["messages"][2], AIMessage)
 
     @pytest.mark.asyncio
-    async def test_astream_events_yields_token_events(self, mock_chroma):
-        """astream_events should yield on_chat_model_stream events."""
-        llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm)
+    async def test_astream_custom_yields_token_events(self, mock_chroma):
+        """graph.astream(stream_mode='custom') should yield token events from answer_node."""
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, mock_chroma, chat_llm)
 
-        events = []
-        async for event in graph.astream_events(
-            {"messages": [HumanMessage(content="test")]},
-            version="v2",
-        ):
-            events.append(event)
+        state: ChatState = {
+            "messages": [HumanMessage(content="test")],
+            "search_manual": False,
+            "search_forum": False,
+            "search_query_manual": "",
+            "search_query_forum": "",
+            "manual_chunks": [],
+            "forum_chunks": [],
+        }
 
-        stream_events = [
-            e for e in events if e.get("event") == "on_chat_model_stream"
-        ]
-        assert len(stream_events) > 0
+        token_events = []
+        async for custom_event in graph.astream(state, stream_mode="custom"):
+            if custom_event.get("type") == "token":
+                token_events.append(custom_event.get("token", ""))
 
-        first = stream_events[0]
-        chunk = first.get("data", {}).get("chunk")
-        assert chunk is not None
-        assert chunk.content
+        assert len(token_events) > 0, "Expected at least one token event from answer_node"
+        assert "".join(token_events) == "Hello World!", (
+            f"Expected 'Hello World!', got {''.join(token_events)!r}"
+        )
 
-    def test_retrieval_uses_search_query(self, mock_chroma):
+    @patch("app.graph.graph.get_stream_writer")
+    def test_retrieval_uses_search_query(self, mock_writer, mock_chroma):
         """Retrieval nodes should use search_query from state, not raw user message."""
         state: ChatState = {
             "messages": [HumanMessage("旷课了怎么办")],
@@ -206,55 +204,19 @@ class TestGraphInvocation:
         assert called_query == "旷课 处分 规定"
 
     @pytest.mark.asyncio
-    async def test_astream_produces_token_events_for_answer(self, mock_chroma):
-        """graph.astream(messages) should yield token events from answer_node."""
-        # Use separate models: routing non-streaming, chat streaming (matches real setup)
-        routing_llm = MockStreamingChatModel()
-        routing_llm.streaming = False
-        chat_llm = MockStreamingChatModel()
-        graph = compile_graph(routing_llm, mock_chroma, chat_llm)
-
-        state = {
-            "messages": [HumanMessage(content="test")],
-            "search_manual": False,
-            "search_forum": False,
-            "search_query_manual": "",
-            "search_query_forum": "",
-            "manual_chunks": [],
-            "forum_chunks": [],
-        }
-
-        token_events = []
-        async for event_type, event_data in graph.astream(
-            state,
-            stream_mode=["updates", "messages"],
-        ):
-            if event_type == "messages":
-                msg_chunk, metadata = event_data
-                if isinstance(msg_chunk, AIMessageChunk) and msg_chunk.content:
-                    token_events.append(msg_chunk.content)
-
-        # The answer_node uses chat_llm.invoke() with streaming=True
-        # MockStreamingChatModel._stream yields ["Hello", " ", "World", "!"]
-        # These should be captured as individual token events
-        assert len(token_events) > 0, "Expected at least one token event from answer_node"
-        assert "".join(token_events) == "Hello World!", (
-            f"Expected 'Hello World!', got {''.join(token_events)!r}"
-        )
-
-    def test_conversation_context_preserved(self, mock_chroma):
+    async def test_conversation_context_preserved(self, mock_chroma):
         """Graph should preserve prior conversation context (messages pass through)."""
         llm = MockStreamingChatModel()
         graph = compile_graph(llm, mock_chroma, llm)
 
-        result1 = graph.invoke({
+        result = await graph.ainvoke({
             "messages": [HumanMessage(content="First message")],
         })
-        assert len(result1["messages"]) == 2
-        assert result1["messages"][0].content == "First message"
-        assert isinstance(result1["messages"][1], AIMessage)
+        assert len(result["messages"]) == 2
+        assert result["messages"][0].content == "First message"
+        assert isinstance(result["messages"][1], AIMessage)
 
-        result2 = graph.invoke({
+        result2 = await graph.ainvoke({
             "messages": [HumanMessage(content="First message"), HumanMessage(content="Second message")],
         })
         assert len(result2["messages"]) == 3
@@ -266,13 +228,13 @@ class TestGraphInvocation:
 class TestAnswerNode:
     """Tests for the answer_node and graph topology."""
 
-    def test_answer_node_returns_messages(self, mock_chroma):
+    @pytest.mark.asyncio
+    async def test_answer_node_returns_messages(self, mock_chroma):
         """answer_node should return an AIMessage in messages."""
         from app.graph.graph import answer_node, ChatState
-        from langchain_core.messages import HumanMessage, AIMessage
 
-        llm = MagicMock()
-        llm.invoke.return_value = AIMessage(content="根据学生手册规定...")
+        llm = MagicMock(spec=["astream"])
+        llm.astream.return_value = _async_gen([AIMessageChunk(content="根据学生手册规定...")])
 
         state: ChatState = {
             "messages": [HumanMessage("旷课会怎样")],
@@ -284,31 +246,30 @@ class TestAnswerNode:
             "forum_chunks": [],
         }
 
-        result = answer_node(state, llm)
+        with patch("app.graph.graph.get_stream_writer") as mock_writer:
+            result = await answer_node(state, llm)
+
         assert "messages" in result
         assert len(result["messages"]) == 1
         assert isinstance(result["messages"][0], AIMessage)
 
-    def test_graph_always_reaches_answer_node(self, mock_chroma):
+    @pytest.mark.asyncio
+    async def test_graph_always_reaches_answer_node(self, mock_chroma):
         """With no retrieval needed, graph should still reach answer_node."""
-        from app.graph.graph import compile_graph, ChatState
-        from langchain_core.messages import HumanMessage
-        from langchain_openai import ChatOpenAI
-        from unittest.mock import MagicMock, patch
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MagicMock(spec=["astream"])
+        chat_llm.astream.return_value = _async_gen([AIMessageChunk(content="Hello!")])
 
-        mock_llm = MagicMock(spec=ChatOpenAI)
-        mock_llm.invoke.return_value = AIMessage(content="Hello!")
+        graph = compile_graph(routing_llm, mock_chroma, chat_llm)
 
-        chroma = mock_chroma
-        graph = compile_graph(mock_llm, chroma, mock_llm)
-
-        result = graph.invoke({
+        result = await graph.ainvoke({
             "messages": [HumanMessage(content="天气怎么样")],
-            "search_manual": False,
-            "search_forum": False,
-            "search_query_manual": "",
-            "search_query_forum": "",
-            "manual_chunks": [],
-            "forum_chunks": [],
         })
         assert len(result["messages"]) >= 1
+
+
+async def _async_gen(items):
+    """Helper: async generator yielding items."""
+    for item in items:
+        yield item

@@ -1,6 +1,6 @@
 """Tests for the RAG-enabled LangGraph pipeline."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import HumanMessage, AIMessage
@@ -12,7 +12,8 @@ from app.graph.graph import (
 )
 
 
-def test_routing_node_parses_json():
+@patch("app.graph.graph.get_stream_writer")
+def test_routing_node_parses_json(mock_writer):
     llm = MagicMock()
     llm.invoke.return_value = AIMessage(
         content='{"search_manual": true, "search_forum": false, '
@@ -35,7 +36,8 @@ def test_routing_node_parses_json():
     assert result["search_query_forum"] == ""
 
 
-def test_routing_node_fallback_on_bad_json():
+@patch("app.graph.graph.get_stream_writer")
+def test_routing_node_fallback_on_bad_json(mock_writer):
     llm = MagicMock()
     llm.invoke.return_value = AIMessage(content="not json")
     state: ChatState = {

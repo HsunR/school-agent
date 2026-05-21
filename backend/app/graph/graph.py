@@ -13,6 +13,8 @@ Graph:
                │
                ▼
               END
+
+Nodes emit typed events via ``get_stream_writer()`` for SSE streaming.
 """
 
 import json
@@ -23,6 +25,7 @@ import operator
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from app.rag.chroma_manager import ChromaManager, COLLECTION_MANUAL, COLLECTION_FORUM
@@ -82,6 +85,7 @@ class ChatState(TypedDict):
 
 def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
     """Classify whether the user question needs each knowledge source."""
+    writer = get_stream_writer()
     last_msg = state["messages"][-1].content if state["messages"] else ""
     response: AIMessage = llm.invoke([
         SystemMessage(content=ROUTING_SYSTEM_PROMPT),
@@ -107,6 +111,15 @@ def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
         last_msg[:50], search_manual, search_forum,
         search_query_manual, search_query_forum,
     )
+    writer({
+        "type": "status",
+        "node": "routing",
+        "label": "正在分析你的问题...",
+        "decision": {
+            "search_manual": search_manual,
+            "search_forum": search_forum,
+        },
+    })
     return {
         "search_manual": search_manual,
         "search_forum": search_forum,
@@ -117,6 +130,7 @@ def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
 
 def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     """Retrieve chunks from the student manual collection."""
+    writer = get_stream_writer()
     if not state.get("search_manual"):
         return {"manual_chunks": []}
     query = state.get("search_query_manual") or ""
@@ -124,11 +138,19 @@ def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"manual_chunks": []}
     chunks = chroma.retrieve(COLLECTION_MANUAL, query)
     logger.info("Manual retrieval: %d chunks", len(chunks))
+    previews = [{"preview": c[:200], "source": "学生手册"} for c in chunks]
+    writer({
+        "type": "retrieval",
+        "source": "student_manual",
+        "label": "已检索到【学生手册】相关规定" if chunks else "【学生手册】未检索到相关内容",
+        "chunks": previews,
+    })
     return {"manual_chunks": chunks}
 
 
 def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     """Retrieve chunks from the school forum collection."""
+    writer = get_stream_writer()
     if not state.get("search_forum"):
         return {"forum_chunks": []}
     query = state.get("search_query_forum") or ""
@@ -136,13 +158,21 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
         return {"forum_chunks": []}
     chunks = chroma.retrieve(COLLECTION_FORUM, query)
     logger.info("Forum retrieval: %d chunks", len(chunks))
+    previews = [{"preview": c[:200], "source": "学校贴吧"} for c in chunks]
+    writer({
+        "type": "retrieval",
+        "source": "school_forum",
+        "label": "已检索到【学校贴吧】相关讨论" if chunks else "【学校贴吧】未检索到相关内容",
+        "chunks": previews,
+    })
     return {"forum_chunks": chunks}
 
 
 # ── Answer node ──
 
-def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
-    """Generate the final answer using retrieved context."""
+async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
+    """Generate the final answer using retrieved context, streaming tokens."""
+    writer = get_stream_writer()
     manual_chunks = state.get("manual_chunks", [])
     forum_chunks = state.get("forum_chunks", [])
     manual_context = "\n\n".join(manual_chunks) if manual_chunks else "（未检索到相关内容）"
@@ -160,8 +190,13 @@ def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
         )
         messages.insert(0, context_msg)
 
-    response = chat_llm.invoke(messages)
-    return {"messages": [response]}
+    full_response = ""
+    async for chunk in chat_llm.astream(messages):
+        if chunk.content:
+            full_response += chunk.content
+            writer({"type": "token", "token": chunk.content})
+
+    return {"messages": [AIMessage(content=full_response)]}
 
 
 # ── Conditional edge ──
@@ -197,7 +232,11 @@ def compile_graph(
     builder.add_node("routing_node", lambda state: routing_node(state, routing_llm))
     builder.add_node("manual_retrieval_node", lambda state: manual_retrieval_node(state, chroma))
     builder.add_node("forum_retrieval_node", lambda state: forum_retrieval_node(state, chroma))
-    builder.add_node("answer_node", lambda state: answer_node(state, chat_llm))
+
+    async def _answer_node(state):
+        return await answer_node(state, chat_llm)
+
+    builder.add_node("answer_node", _answer_node)
 
     builder.add_edge(START, "routing_node")
     builder.add_conditional_edges("routing_node", should_retrieve, {

@@ -1,7 +1,7 @@
 """Chat service using LangChain with RAG support.
 
-Runs the LangGraph pipeline via ``graph.astream()``, parsing node
-updates and message tokens into typed SSE events (status/retrieval/token/error).
+Runs the LangGraph pipeline via ``graph.astream(stream_mode="custom")``,
+passing through typed events emitted by each graph node via ``get_stream_writer()``.
 """
 
 import json
@@ -11,7 +11,6 @@ from typing import Any
 
 from langchain_core.messages import (
     AIMessage,
-    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -36,14 +35,13 @@ _ROLE_MAP: dict[str, type[BaseMessage]] = {
 class ChatService:
     """Service for handling chat interactions with optional RAG.
 
-    Uses ``graph.astream(["updates", "messages"])`` to emit
-    multi-stage SSE events: status → retrieval → token stream.
+    Uses ``graph.astream(stream_mode="custom")`` where graph nodes
+    emit typed events directly via ``get_stream_writer()``.
     """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-        # Chat LLM (for the final answer)
         self.chat_llm = ChatOpenAI(
             model=settings.llm_chat_model,
             base_url=settings.llm_chat_base_url,
@@ -52,7 +50,6 @@ class ChatService:
             timeout=settings.llm_timeout,
         )
 
-        # Routing LLM (for classification)
         self.routing_llm = ChatOpenAI(
             model=settings.llm_routing_model,
             base_url=settings.llm_routing_base_url,
@@ -61,11 +58,9 @@ class ChatService:
             timeout=settings.llm_timeout,
         )
 
-        # RAG components
         self.embedding_client = EmbeddingClient(settings)
         self.chroma = ChromaManager(settings, self.embedding_client)
 
-        # Compiled graph
         self.graph = compile_graph(self.routing_llm, self.chroma, self.chat_llm)
 
     def _to_langchain(self, messages: list[ChatMessage]) -> list[BaseMessage]:
@@ -81,7 +76,7 @@ class ChatService:
         self,
         messages: list[ChatMessage],
     ) -> AsyncGenerator[str, Any]:
-        """Stream a chat response with SSE-typed events via graph.astream."""
+        """Stream a chat response with SSE-typed events via graph.astream(custom)."""
         langchain_messages = self._to_langchain(messages)
 
         initial_state = {
@@ -95,22 +90,11 @@ class ChatService:
         }
 
         try:
-            async for event_type, event_data in self.graph.astream(
+            async for custom_event in self.graph.astream(
                 initial_state,
-                stream_mode=["updates", "messages"],
+                stream_mode="custom",
             ):
-                if event_type == "updates":
-                    for node_name, node_output in event_data.items():
-                        sse_event = self._convert_update_to_sse(node_name, node_output)
-                        if sse_event:
-                            yield sse_event
-                elif event_type == "messages":
-                    msg_chunk, metadata = event_data
-                    if isinstance(msg_chunk, AIMessageChunk) and msg_chunk.content:
-                        yield json.dumps({
-                            "type": "token",
-                            "token": msg_chunk.content,
-                        }, ensure_ascii=False)
+                yield json.dumps(custom_event, ensure_ascii=False)
         except Exception:
             logger.exception("Graph streaming failed")
             yield json.dumps({
@@ -119,35 +103,3 @@ class ChatService:
             return
 
         yield json.dumps({"type": "token", "token": "", "done": True})
-
-    def _convert_update_to_sse(self, node_name: str, node_output: dict) -> str | None:
-        if node_name == "routing_node":
-            decision = {
-                "search_manual": node_output.get("search_manual", False),
-                "search_forum": node_output.get("search_forum", False),
-            }
-            return json.dumps({
-                "type": "status", "node": "routing",
-                "label": "正在分析你的问题...",
-                "decision": decision,
-            }, ensure_ascii=False)
-
-        elif node_name == "manual_retrieval_node":
-            chunks = node_output.get("manual_chunks", [])
-            previews = [{"preview": c[:200], "source": "学生手册"} for c in chunks]
-            label = "已检索到【学生手册】相关规定" if chunks else "【学生手册】未检索到相关内容"
-            return json.dumps({
-                "type": "retrieval", "source": "student_manual",
-                "label": label, "chunks": previews,
-            }, ensure_ascii=False)
-
-        elif node_name == "forum_retrieval_node":
-            chunks = node_output.get("forum_chunks", [])
-            previews = [{"preview": c[:200], "source": "学校贴吧"} for c in chunks]
-            label = "已检索到【学校贴吧】相关讨论" if chunks else "【学校贴吧】未检索到相关内容"
-            return json.dumps({
-                "type": "retrieval", "source": "school_forum",
-                "label": label, "chunks": previews,
-            }, ensure_ascii=False)
-
-        return None
