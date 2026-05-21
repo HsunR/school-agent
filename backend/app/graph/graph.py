@@ -1,19 +1,18 @@
 """LangGraph state graph definition for the conversational agent.
 
-Extended graph:
+Graph:
     START → routing_node
               │
               ▼ (should_retrieve)
          ┌────┴────┐
-    manual_node  forum_node  (or END if neither)
+    manual_node  forum_node  (or answer_node if neither)
          │           │
          └─────┬─────┘
-               ▼ (should_retrieve again if needed)
+               ▼
+          answer_node
+               │
+               ▼
               END
-
-After the graph completes, the service layer streams the chat answer
-directly via ``llm.astream()`` (not through the graph), preserving
-per-token SSE delivery.
 """
 
 import json
@@ -140,47 +139,77 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     return {"forum_chunks": chunks}
 
 
+# ── Answer node ──
+
+def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
+    """Generate the final answer using retrieved context."""
+    manual_chunks = state.get("manual_chunks", [])
+    forum_chunks = state.get("forum_chunks", [])
+    manual_context = "\n\n".join(manual_chunks) if manual_chunks else "（未检索到相关内容）"
+    forum_context = "\n\n".join(forum_chunks) if forum_chunks else "（未检索到相关内容）"
+
+    has_context = bool(manual_chunks or forum_chunks)
+    messages = list(state["messages"])
+
+    if has_context:
+        context_msg = SystemMessage(
+            RETRIEVAL_CONTEXT_TEMPLATE.format(
+                manual_context=manual_context,
+                forum_context=forum_context,
+            )
+        )
+        messages.insert(0, context_msg)
+
+    response = chat_llm.invoke(messages)
+    return {"messages": [response]}
+
+
 # ── Conditional edge ──
 
 def should_retrieve(state: ChatState) -> str:
-    """Return the next retrieval node, or END if both are done/skipped."""
+    """Return the next node: retrieval node or answer_node."""
     if state.get("search_manual") and not state.get("manual_chunks"):
         return "manual_retrieval_node"
     if state.get("search_forum") and not state.get("forum_chunks"):
         return "forum_retrieval_node"
-    return END
+    return "answer_node"
 
 
 # ── Graph builder ──
 
-def compile_graph(llm: BaseChatModel, chroma: ChromaManager) -> StateGraph:
+def compile_graph(
+    routing_llm: BaseChatModel,
+    chroma: ChromaManager,
+    chat_llm: BaseChatModel,
+) -> StateGraph:
     """Build and compile the LangGraph state graph.
 
     Args:
-        llm: The LLM instance for the routing node.
+        routing_llm: The LLM instance for the routing node.
         chroma: The ChromaDB manager instance.
+        chat_llm: The LLM instance for the answer node (streaming).
 
     Returns:
         A compiled ``StateGraph``.
     """
     builder = StateGraph(ChatState)
 
-    builder.add_node("routing_node", lambda state: routing_node(state, llm))
+    builder.add_node("routing_node", lambda state: routing_node(state, routing_llm))
     builder.add_node("manual_retrieval_node", lambda state: manual_retrieval_node(state, chroma))
     builder.add_node("forum_retrieval_node", lambda state: forum_retrieval_node(state, chroma))
+    builder.add_node("answer_node", lambda state: answer_node(state, chat_llm))
 
     builder.add_edge(START, "routing_node")
     builder.add_conditional_edges("routing_node", should_retrieve, {
         "manual_retrieval_node": "manual_retrieval_node",
         "forum_retrieval_node": "forum_retrieval_node",
-        END: END,
+        "answer_node": "answer_node",
     })
     builder.add_conditional_edges("manual_retrieval_node", should_retrieve, {
         "forum_retrieval_node": "forum_retrieval_node",
-        END: END,
+        "answer_node": "answer_node",
     })
-    builder.add_conditional_edges("forum_retrieval_node", should_retrieve, {
-        END: END,
-    })
+    builder.add_edge("forum_retrieval_node", "answer_node")
+    builder.add_edge("answer_node", END)
 
     return builder.compile()

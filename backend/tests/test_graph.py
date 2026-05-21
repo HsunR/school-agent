@@ -13,7 +13,7 @@ import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, AIMessageChunk, SystemMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatGenerationChunk, ChatGeneration, ChatResult
-from langgraph.graph import START, END
+from langgraph.graph import START
 
 from app.graph.graph import ChatState, compile_graph, manual_retrieval_node
 
@@ -54,13 +54,13 @@ class TestGraphCompilation:
     def test_graph_compiles(self, mock_chroma):
         """compile_graph should return a compiled graph."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         assert graph is not None
 
     def test_graph_is_compiled(self, mock_chroma):
         """The returned graph should be a CompiledStateGraph."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         assert "compile" not in dir(type(graph)) or hasattr(graph, "invoke")
         assert hasattr(graph, "invoke")
         assert hasattr(graph, "ainvoke")
@@ -73,22 +73,29 @@ class TestGraphStructure:
     def test_has_routing_node(self, mock_chroma):
         """Graph should have a 'routing_node' node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         node_names = list(graph.nodes.keys())
         assert "routing_node" in node_names, f"Expected 'routing_node' in nodes, got {node_names}"
 
     def test_has_retrieval_nodes(self, mock_chroma):
         """Graph should have retrieval nodes for both collections."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         node_names = list(graph.nodes.keys())
         assert "manual_retrieval_node" in node_names
         assert "forum_retrieval_node" in node_names
 
+    def test_has_answer_node(self, mock_chroma):
+        """Graph should have an 'answer_node' node."""
+        llm = MockStreamingChatModel()
+        graph = compile_graph(llm, mock_chroma, llm)
+        node_names = list(graph.nodes.keys())
+        assert "answer_node" in node_names, f"Expected 'answer_node' in nodes, got {node_names}"
+
     def test_start_to_routing_edge(self, mock_chroma):
         """There should be an edge from START to routing_node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         g = graph.get_graph()
         edges = g.edges
         edge_pairs = [(e.source, e.target) for e in edges]
@@ -97,9 +104,9 @@ class TestGraphStructure:
         )
 
     def test_routing_to_conditional_edges(self, mock_chroma):
-        """Routing node should have conditional edges to retrieval nodes or END."""
+        """Routing node should have conditional edges to retrieval or answer nodes."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         g = graph.get_graph()
         edges = g.edges
         routing_edges = [(e.source, e.target) for e in edges if e.source == "routing_node"]
@@ -116,7 +123,7 @@ class TestGraphInvocation:
     def test_invoke_returns_messages(self, mock_chroma):
         """Graph invoke should return a dict with 'messages' key."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         result = graph.invoke({"messages": [HumanMessage(content="test")]})
         assert isinstance(result, dict)
         assert "messages" in result
@@ -125,7 +132,7 @@ class TestGraphInvocation:
         """Graph should set search_manual and search_forum to False by default
         when routing can't parse the LLM response as valid JSON."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         result = graph.invoke({"messages": [HumanMessage(content="test")]})
         assert result.get("search_manual") is False
         assert result.get("search_forum") is False
@@ -136,7 +143,7 @@ class TestGraphInvocation:
     async def test_ainvoke_returns_messages(self, mock_chroma):
         """Async invoke should also return messages."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
         assert isinstance(result, dict)
         assert "messages" in result
@@ -144,23 +151,24 @@ class TestGraphInvocation:
     def test_invoke_with_system_message(self, mock_chroma):
         """Graph should work with system + user messages."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
         result = graph.invoke({
             "messages": [
                 SystemMessage(content="Be concise"),
                 HumanMessage(content="test"),
             ],
         })
-        # Messages pass through unchanged (graph doesn't generate responses)
-        assert len(result["messages"]) == 2
+        # Messages pass through, plus an AIMessage from answer_node
+        assert len(result["messages"]) == 3
         assert result["messages"][0].content == "Be concise"
         assert result["messages"][1].content == "test"
+        assert isinstance(result["messages"][2], AIMessage)
 
     @pytest.mark.asyncio
     async def test_astream_events_yields_token_events(self, mock_chroma):
         """astream_events should yield on_chat_model_stream events."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
 
         events = []
         async for event in graph.astream_events(
@@ -200,17 +208,70 @@ class TestGraphInvocation:
     def test_conversation_context_preserved(self, mock_chroma):
         """Graph should preserve prior conversation context (messages pass through)."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma)
+        graph = compile_graph(llm, mock_chroma, llm)
 
         result1 = graph.invoke({
             "messages": [HumanMessage(content="First message")],
         })
-        assert len(result1["messages"]) == 1
+        assert len(result1["messages"]) == 2
         assert result1["messages"][0].content == "First message"
+        assert isinstance(result1["messages"][1], AIMessage)
 
         result2 = graph.invoke({
             "messages": [HumanMessage(content="First message"), HumanMessage(content="Second message")],
         })
-        assert len(result2["messages"]) == 2
+        assert len(result2["messages"]) == 3
         assert result2["messages"][0].content == "First message"
         assert result2["messages"][1].content == "Second message"
+        assert isinstance(result2["messages"][2], AIMessage)
+
+
+class TestAnswerNode:
+    """Tests for the answer_node and graph topology."""
+
+    def test_answer_node_returns_messages(self, mock_chroma):
+        """answer_node should return an AIMessage in messages."""
+        from app.graph.graph import answer_node, ChatState
+        from langchain_core.messages import HumanMessage, AIMessage
+
+        llm = MagicMock()
+        llm.invoke.return_value = AIMessage(content="根据学生手册规定...")
+
+        state: ChatState = {
+            "messages": [HumanMessage("旷课会怎样")],
+            "search_manual": True,
+            "search_forum": False,
+            "search_query_manual": "旷课 处分",
+            "search_query_forum": "",
+            "manual_chunks": ["第四十一条 旷课处分规定..."],
+            "forum_chunks": [],
+        }
+
+        result = answer_node(state, llm)
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+        assert isinstance(result["messages"][0], AIMessage)
+
+    def test_graph_always_reaches_answer_node(self, mock_chroma):
+        """With no retrieval needed, graph should still reach answer_node."""
+        from app.graph.graph import compile_graph, ChatState
+        from langchain_core.messages import HumanMessage
+        from langchain_openai import ChatOpenAI
+        from unittest.mock import MagicMock, patch
+
+        mock_llm = MagicMock(spec=ChatOpenAI)
+        mock_llm.invoke.return_value = AIMessage(content="Hello!")
+
+        chroma = mock_chroma
+        graph = compile_graph(mock_llm, chroma, mock_llm)
+
+        result = graph.invoke({
+            "messages": [HumanMessage(content="天气怎么样")],
+            "search_manual": False,
+            "search_forum": False,
+            "search_query_manual": "",
+            "search_query_forum": "",
+            "manual_chunks": [],
+            "forum_chunks": [],
+        })
+        assert len(result["messages"]) >= 1

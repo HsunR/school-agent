@@ -9,7 +9,6 @@ from app.graph.graph import (
     ChatState,
     routing_node,
     should_retrieve,
-    END,
 )
 
 
@@ -81,7 +80,7 @@ def test_should_retrieve_forum_after_manual():
     assert should_retrieve(state) == "forum_retrieval_node"
 
 
-def test_should_retrieve_end_when_no_search():
+def test_should_retrieve_answer_node_when_no_search():
     state: ChatState = {
         "messages": [],
         "search_manual": False,
@@ -91,4 +90,4 @@ def test_should_retrieve_end_when_no_search():
         "manual_chunks": [],
         "forum_chunks": [],
     }
-    assert should_retrieve(state) == END
+    assert should_retrieve(state) == "answer_node"

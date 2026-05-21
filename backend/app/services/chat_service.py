@@ -64,7 +64,7 @@ class ChatService:
         self.chroma = ChromaManager(settings, self.embedding_client)
 
         # Compiled graph
-        self.graph = compile_graph(self.routing_llm, self.chroma)
+        self.graph = compile_graph(self.routing_llm, self.chroma, self.chat_llm)
 
     def _to_langchain(self, messages: list[ChatMessage]) -> list[BaseMessage]:
         result: list[BaseMessage] = []
