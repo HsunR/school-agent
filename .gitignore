@@ -2,9 +2,17 @@
 node_modules/
 dist/
 .next/
+out/
 *.tsbuildinfo
 .eslintcache
 .cache/
+.turbo/
+.nyc_output/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Python
 __pycache__/
@@ -13,11 +21,15 @@ __pycache__/
 *.pyd
 *.egg-info/
 *.egg
-dist/
 build/
 .venv/
 venv/
 env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pip/
+.tox/
 
 # IDE
 .vscode/
@@ -25,7 +37,6 @@ env/
 *.swp
 *.swo
 *~
-.DS_Store
 
 # OS
 .DS_Store
@@ -37,6 +48,7 @@ Desktop.ini
 .env
 .env.local
 .env.*.local
+.envrc
 
 # OpenCode internal tracking
 .sisyphus/

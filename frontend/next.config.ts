@@ -2,8 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Allow large uploads (e.g. knowledge base files) through the API proxy
-  middlewareClientMaxBodySize: "50MB",
-
+  experimental: {
+    proxyClientMaxBodySize: '50mb',
+  },
   async rewrites() {
     return [
       {
