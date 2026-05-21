@@ -1,9 +1,9 @@
-"""Tests for Pydantic schemas (ChatMessage, ChatRequest, ChatResponse)."""
+"""Tests for Pydantic schemas (ChatMessage, ChatRequest)."""
 
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse
+from app.schemas.chat import ChatMessage, ChatRequest
 
 
 class TestChatMessage:
@@ -78,20 +78,3 @@ class TestChatRequest:
         assert req.stream is False
 
 
-class TestChatResponse:
-    """ChatResponse schema validation."""
-
-    def test_defaults(self):
-        resp = ChatResponse()
-        assert resp.token == ""
-        assert resp.done is False
-        assert resp.error is None
-
-    def test_full_response(self):
-        resp = ChatResponse(token="abc123", done=True, error=None)
-        assert resp.token == "abc123"
-        assert resp.done is True
-
-    def test_error_response(self):
-        resp = ChatResponse(token="", done=True, error="Something went wrong")
-        assert resp.error == "Something went wrong"
