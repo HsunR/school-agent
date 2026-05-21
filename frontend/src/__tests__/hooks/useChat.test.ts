@@ -104,14 +104,20 @@ describe("useChat", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it("should reject messages over 1000 characters", async () => {
+  it("should allow messages over 1000 characters", async () => {
+    const stream = createSSEStream('data: {"type":"token","token":"","done":true}\n\n');
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      body: stream,
+    });
+
     const { result } = renderHook(() => useChat());
 
     await act(async () => {
       await result.current.sendMessage("a".repeat(1001));
     });
 
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("should set error state when fetch fails", async () => {
@@ -292,5 +298,33 @@ describe("useChat", () => {
 
     expect(result.current.error).toBe("API quota exceeded");
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("should handle scoring events and update chunk scores", async () => {
+    const stream = createSSEStream(
+      'data: {"type":"retrieval","source":"school_forum","label":"已检索到【学校贴吧】相关讨论","chunks":[{"preview":"宿舍管理费每学期500元","source":"学校贴吧"},{"preview":"食堂推荐窗口","source":"学校贴吧"}]}\n\n',
+      'data: {"type":"scoring","source":"school_forum","index":0,"score":85,"compressed":"宿舍管理费500元"}\n\n',
+      'data: {"type":"scoring","source":"school_forum","index":1,"score":30,"compressed":"食堂"}\n\n',
+      'data: {"type":"scoring","source":"done","done":true}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
+    );
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      body: stream,
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage("宿舍管理费");
+    });
+
+    const msgs = result.current.messages;
+    const retrievalMsg = msgs.find((m) => m.role === "retrieval");
+    expect(retrievalMsg).toBeDefined();
+    expect(retrievalMsg!.chunks![0].score).toBe(85);
+    expect(retrievalMsg!.chunks![0].compressed).toBe("宿舍管理费500元");
+    expect(retrievalMsg!.chunks![1].score).toBe(30);
+    expect(retrievalMsg!.chunks![1].compressed).toBe("食堂");
   });
 });
