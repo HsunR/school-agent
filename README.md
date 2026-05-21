@@ -1,153 +1,155 @@
 # School Agent
 
-AI-powered educational assistant platform that leverages Large Language Models to provide intelligent tutoring, homework assistance, and personalized learning experiences.
+AI-powered educational assistant with RAG knowledge base. Built with FastAPI + LangGraph + ChromaDB (backend) and Next.js 16 (frontend).
 
-## Tech Stack
+## Architecture
 
-### Frontend
-- **Framework**: Next.js
-- **Styling**: Tailwind CSS
-- **Language**: TypeScript
+### LangGraph Pipeline (Backend)
 
-### Backend
-- **Framework**: FastAPI
-- **AI Framework**: LangChain & LangGraph
-- **Language**: Python
+```
+                                    User Question
+                                         │
+                                         ▼
+              ┌──────────────────────────────────────┐
+              │           routing_node                │
+              │  Classifies question → needs search?  │
+              │  Emits: status event + search flags   │
+              └────────────┬─────────────────────────┘
+                           │ should_retrieve
+                           ▼
+              ┌──────────────────────┐
+              │  manual_retrieval    │  (if search_manual=true)
+              │  ChromaDB: 学生手册  │
+              │  Emits: retrieval    │
+              └──────────┬───────────┘
+                         │ should_retrieve
+                         ▼
+              ┌──────────────────────┐
+              │  forum_retrieval     │  (if search_forum=true)
+              │  ChromaDB: 学校贴吧  │
+              │  Emits: retrieval    │
+              └──────────┬───────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │     scoring_node     │
+              │  Per-chunk LLM       │
+              │  Score (0-100) +     │
+              │  compress (crop      │
+              │  irrelevant text)    │
+              │  Emits: scoring      │
+              └──────────┬───────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │     answer_node      │
+              │  LLM generates final │
+              │  answer with context │
+              │  Emits: token        │
+              └──────────┬───────────┘
+                         │
+                         ▼
+                    Final Answer
+```
+
+### SSE Event Stream
+
+Each graph node emits typed events via SSE (POST-based, not EventSource):
+
+| Event | Source | Content |
+|-------|--------|---------|
+| `status` | routing_node | Decision: which knowledge bases to search |
+| `retrieval` | retrieval nodes | Raw chunks from ChromaDB |
+| `scoring` | scoring_node | Per-chunk relevance score + compressed text |
+| `token` | answer_node | Streaming token of final answer |
+
+### 4-Tier LLM Configuration
+
+| Tier | Model Config | Purpose |
+|------|-------------|---------|
+| Chat | `LLM_CHAT_*` | Final answer generation (streaming) |
+| Routing | `LLM_ROUTING_*` | Question classification (non-streaming) |
+| Scoring | `LLM_SCORING_*` | Chunk relevance scoring (non-streaming, 15s timeout) |
+| Embedding | `LLM_EMBEDDING_*` | Vector embeddings for ChromaDB |
 
 ## Project Structure
 
 ```
 school-agent/
-├── frontend/            # Next.js frontend application (port 3000)
-├── backend/             # FastAPI backend service (port 8000)
-├── pnpm-workspace.yaml  # pnpm workspace configuration
-├── package.json         # Root package.json with workspace scripts
-└── .env.example         # Environment variable template
+├── frontend/                    # Next.js 16 + TypeScript + Tailwind v4
+│   └── src/
+│       ├── app/
+│       │   ├── page.tsx         # Main chat UI
+│       │   ├── admin/           # Knowledge base management page
+│       │   └── api/chat/        # BFF proxy to backend
+│       ├── components/
+│       │   ├── ChatInput.tsx    # Message input with loading state
+│       │   ├── ChatMessage.tsx  # Renders user/assistant/status/retrieval/scoring bubbles
+│       │   ├── RetrievalCard.tsx# Chunk list with score display + sorting animation
+│       │   ├── DetailModal.tsx  # Full content modal (tab: compressed / original)
+│       │   └── MarkdownRenderer.tsx
+│       ├── hooks/useChat.ts     # SSE streaming consumer (fetch + ReadableStream)
+│       └── types/chat.ts        # ChatMessage, SSEPayload, RetrievalPreview
+├── backend/
+│   └── app/
+│       ├── main.py              # FastAPI entry, CORS, router registration
+│       ├── api/
+│       │   ├── chat.py          # POST /api/chat SSE endpoint
+│       │   └── admin.py         # KB admin: upload, preview, clear, stats
+│       ├── core/settings.py     # pydantic-settings (4-tier LLM config)
+│       ├── schemas/
+│       │   ├── chat.py          # ChatRequest, ChatMessage
+│       │   └── admin.py         # Admin request/response models
+│       ├── services/
+│       │   └── chat_service.py  # ChatService: LLM instances → compile_graph
+│       ├── graph/graph.py       # LangGraph StateGraph (5 nodes)
+│       └── rag/
+│           ├── chroma_manager.py # ChromaDB wrapper (2 collections)
+│           └── embeddings.py    # OpenAI-compatible embedding client
+└── docs/
+    ├── api.md                   # Full API contract
+    └── superpowers/             # Design specs & implementation plans
 ```
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js >= 18
-- pnpm >= 8
-- Python >= 3.10
-
-### Installation
+## Quick Start
 
 ```bash
-# Frontend
-cd frontend && pnpm install
-
 # Backend
 cd backend && pip install -r requirements.txt
+# Edit .env with your API keys
+uvicorn app.main:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd frontend && pnpm install && pnpm dev
 ```
 
-### Configuration
-
-```bash
-# Copy environment template and set your API key
-cd backend && cp .env.example .env
-# Edit .env: set DEEPSEEK_API_KEY=your_key_here
-```
-
-### Development (two terminals)
-
-**Terminal 1 - Backend** (port 8000):
-```bash
-cd backend && uvicorn app.main:app --reload --port 8000
-```
-
-**Terminal 2 - Frontend** (port 3000, proxies /api/* to backend):
-```bash
-cd frontend && pnpm dev
-```
-
-Open **http://localhost:3000** in your browser.
-
-### Test
-
-```bash
-# Backend tests (65+ tests)
-cd backend && pytest tests/ -v
-
-# Frontend tests (75+ tests)
-cd frontend && npx vitest run
-```
-
-### API Test (curl)
-
-```bash
-curl -N -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"Say hello in **bold**"}]}'
-```
-
-## Project Structure
-
-```
-school-agent/
-├── frontend/             # Next.js 16 + TypeScript + Tailwind
-│   └── src/
-│       ├── app/          # App Router (main page)
-│       ├── components/   # ChatInput, ChatMessage, MarkdownRenderer
-│       ├── hooks/        # useChat (SSE streaming hook)
-│       └── types/        # TypeScript definitions
-├── backend/              # FastAPI + LangChain + LangGraph
-│   └── app/
-│       ├── api/          # SSE chat endpoint
-│       ├── core/         # Settings (pydantic-settings)
-│       ├── schemas/      # Request/response Pydantic models
-│       ├── services/     # ChatService (LLM integration)
-│       └── graph/        # LangGraph StateGraph
-├── docs/
-│   └── api.md            # Full API contract
-├── pnpm-workspace.yaml
-├── package.json
-└── .env.example
-
-### Environment Setup
-
-Copy `.env.example` to `.env` at the project root and fill in your DeepSeek API key:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set `DEEPSEEK_API_KEY` to your actual key.
-
-### Development
-
-Start the backend (terminal 1):
-
-```bash
-cd backend && uvicorn app.main:app --reload --port 8000
-```
-
-Start the frontend (terminal 2):
-
-```bash
-cd frontend && pnpm dev
-```
-
-The frontend runs on http://localhost:3000 and proxies `/api/*` requests to the backend at http://localhost:8000.
-
-### Build
-
-```bash
-pnpm build
-```
-
-### Test
-
-```bash
-pnpm test
-```
+Open http://localhost:3000
 
 ## Environment Variables
 
-| Variable           | Description              | Default                      |
-|--------------------|--------------------------|------------------------------|
-| `DEEPSEEK_API_KEY` | DeepSeek API key         | —                            |
-| `LLM_MODEL`        | LLM model name           | `deepseek-chat`              |
-| `LLM_BASE_URL`     | LLM API base URL         | `https://api.deepseek.com/v1`|
+All LLMs share the same pattern: `LLM_{TIER}_{PROPERTY}`.
+
+| Variable | Required | Default |
+|----------|----------|---------|
+| `LLM_CHAT_API_KEY` | Yes | — |
+| `LLM_ROUTING_API_KEY` | Yes | — |
+| `LLM_SCORING_API_KEY` | Yes | — |
+| `LLM_EMBEDDING_API_KEY` | Yes | — |
+| `LLM_CHAT_MODEL` | No | `deepseek-chat` |
+| `LLM_ROUTING_MODEL` | No | `deepseek-chat` |
+| `LLM_SCORING_MODEL` | No | `deepseek-chat` |
+| `LLM_EMBEDDING_MODEL` | No | `text-embedding-ada-002` |
+| `LLM_CHAT_BASE_URL` | No | `https://api.deepseek.com/v1` |
+| `LLM_ROUTING_BASE_URL` | No | `https://api.deepseek.com/v1` |
+| `LLM_SCORING_BASE_URL` | No | `https://api.deepseek.com/v1` |
+| `LLM_EMBEDDING_BASE_URL` | No | `https://api.deepseek.com/v1` |
+| `CHROMA_PERSIST_DIR` | No | `./chroma_db` |
+| `RAG_TOP_K_MANUAL` | No | `5` |
+| `RAG_TOP_K_FORUM` | No | `5` |
+
+## Test
+
+```bash
+cd backend && pytest tests/ -v    # 140+ tests
+cd frontend && pnpm test          # 90+ tests
+```
