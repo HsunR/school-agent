@@ -86,36 +86,72 @@ export function useChat() {
           if (line.startsWith("data: ")) {
             const payload: SSEPayload = JSON.parse(line.slice(6));
 
-            if (payload.error) {
-              throw new Error(payload.error);
-            }
-
-            if (payload.token) {
+            if (payload.type === "status" && payload.label) {
+              const statusMsg: ChatMessage = {
+                id: `status-${generateId()}`,
+                role: "status",
+                content: payload.label,
+                timestamp: Date.now(),
+                node: payload.node,
+                decision: payload.decision,
+              };
               setMessages((prev) => {
                 const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === "assistant" && last.isStreaming) {
-                  updated[updated.length - 1] = {
-                    ...last,
-                    content: last.content + payload.token,
-                  };
-                }
+                updated.splice(updated.length - 1, 0, statusMsg);
                 return updated;
               });
+              continue;
             }
 
-            if (payload.done) {
+            if (payload.type === "retrieval" && payload.label) {
+              const retrievalMsg: ChatMessage = {
+                id: `retrieval-${generateId()}`,
+                role: "retrieval",
+                content: payload.label,
+                timestamp: Date.now(),
+                chunks: payload.chunks || [],
+              };
               setMessages((prev) => {
                 const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === "assistant") {
-                  updated[updated.length - 1] = {
-                    ...last,
-                    isStreaming: false,
-                  };
-                }
+                updated.splice(updated.length - 1, 0, retrievalMsg);
                 return updated;
               });
+              continue;
+            }
+
+            if (payload.type === "token") {
+              if (payload.token) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last && last.role === "assistant" && last.isStreaming) {
+                    updated[updated.length - 1] = {
+                      ...last,
+                      content: last.content + payload.token,
+                    };
+                  }
+                  return updated;
+                });
+              }
+              if (payload.done) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last && last.role === "assistant") {
+                    updated[updated.length - 1] = {
+                      ...last,
+                      isStreaming: false,
+                    };
+                  }
+                  return updated;
+                });
+              }
+              continue;
+            }
+
+            if (payload.type === "error") {
+              setError(payload.error || "Unknown error");
+              continue;
             }
           }
         }

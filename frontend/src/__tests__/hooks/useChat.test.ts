@@ -21,7 +21,7 @@ describe("useChat", () => {
   });
 
   it("should POST messages to /api/chat when sendMessage is called", async () => {
-    const stream = createSSEStream('data: {"token":"","done":true}\n\n');
+    const stream = createSSEStream('data: {"type":"token","token":"","done":true}\n\n');
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
       body: stream,
@@ -53,9 +53,9 @@ describe("useChat", () => {
 
   it("should accumulate streaming tokens in the assistant message", async () => {
     const stream = createSSEStream(
-      'data: {"token":"Hello","done":false}\n\n',
-      'data: {"token":" World","done":false}\n\n',
-      'data: {"token":"","done":true}\n\n',
+      'data: {"type":"token","token":"Hello","done":false}\n\n',
+      'data: {"type":"token","token":" World","done":false}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
     );
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
@@ -77,8 +77,8 @@ describe("useChat", () => {
 
   it("should set isStreaming to false when done is received", async () => {
     const stream = createSSEStream(
-      'data: {"token":"Hi","done":false}\n\n',
-      'data: {"token":"","done":true}\n\n',
+      'data: {"type":"token","token":"Hi","done":false}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
     );
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
@@ -152,7 +152,7 @@ describe("useChat", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
 
     // Resolve the deferred promise to clean up
-    const stream = createSSEStream('data: {"token":"","done":true}\n\n');
+    const stream = createSSEStream('data: {"type":"token","token":"","done":true}\n\n');
     act(() => {
       resolveFetch({ ok: true, body: stream });
     });
@@ -223,8 +223,8 @@ describe("useChat", () => {
 
     // Second call succeeds
     const stream = createSSEStream(
-      'data: {"token":"Recovered","done":false}\n\n',
-      'data: {"token":"","done":true}\n\n',
+      'data: {"type":"token","token":"Recovered","done":false}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
     );
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
@@ -244,12 +244,12 @@ describe("useChat", () => {
 
   it("should handle multiple sequential messages", async () => {
     const stream1 = createSSEStream(
-      'data: {"token":"First reply","done":false}\n\n',
-      'data: {"token":"","done":true}\n\n',
+      'data: {"type":"token","token":"First reply","done":false}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
     );
     const stream2 = createSSEStream(
-      'data: {"token":"Second reply","done":false}\n\n',
-      'data: {"token":"","done":true}\n\n',
+      'data: {"type":"token","token":"Second reply","done":false}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
     );
 
     (globalThis.fetch as ReturnType<typeof vi.fn>)
@@ -277,7 +277,7 @@ describe("useChat", () => {
 
   it("should handle SSE streaming payload error", async () => {
     const stream = createSSEStream(
-      'data: {"token":"","done":false,"error":"API quota exceeded"}\n\n',
+      'data: {"type":"error","error":"API quota exceeded","done":true}\n\n',
     );
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
