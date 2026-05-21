@@ -8,10 +8,10 @@ import pytest
 from httpx import AsyncClient
 
 
-async def _async_gen(tokens: list[str]) -> AsyncGenerator[str, None]:
-    """Helper: create an async generator yielding the given tokens."""
-    for token in tokens:
-        yield token
+async def _event_gen(events: list[dict]) -> AsyncGenerator[str, None]:
+    """Helper: async generator yielding pre-serialized JSON event strings."""
+    for event in events:
+        yield json.dumps(event, ensure_ascii=False)
 
 
 async def _error_gen(_messages: list) -> AsyncGenerator[str, None]:
@@ -39,7 +39,11 @@ def _mock_service(
 @pytest.mark.asyncio
 async def test_sse_content_type(client: AsyncClient) -> None:
     """Test SSE endpoint returns text/event-stream content type."""
-    mock = _mock_service(lambda _messages: _async_gen(["Hello", " world"]))
+    events = [
+        {"type": "token", "token": "Hello"},
+        {"type": "token", "token": "", "done": True},
+    ]
+    mock = _mock_service(lambda _messages: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -53,7 +57,11 @@ async def test_sse_content_type(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_sse_stream_format(client: AsyncClient) -> None:
     """Test every SSE chunk is a valid ``data: <json>`` line pair."""
-    mock = _mock_service(lambda _messages: _async_gen(["Hello", " world"]))
+    events = [
+        {"type": "token", "token": "Hello"},
+        {"type": "token", "token": "", "done": True},
+    ]
+    mock = _mock_service(lambda _messages: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -64,14 +72,17 @@ async def test_sse_stream_format(client: AsyncClient) -> None:
     for i, chunk in enumerate(chunks):
         assert chunk.startswith("data: "), f"Chunk {i} missing 'data: ' prefix"
         payload = json.loads(chunk.removeprefix("data: "))
-        assert "token" in payload
-        assert "done" in payload
+        assert "type" in payload
 
 
 @pytest.mark.asyncio
 async def test_sse_ends_with_done_true(client: AsyncClient) -> None:
-    """Test the final SSE chunk is ``{"token":"","done":true}``."""
-    mock = _mock_service(lambda _messages: _async_gen(["Hello"]))
+    """Test the final SSE chunk has ``"done":true``."""
+    events = [
+        {"type": "token", "token": "Hello"},
+        {"type": "token", "token": "", "done": True},
+    ]
+    mock = _mock_service(lambda _messages: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -80,7 +91,7 @@ async def test_sse_ends_with_done_true(client: AsyncClient) -> None:
 
     chunks = [c for c in response.text.strip().split("\n\n") if c]
     last_payload = json.loads(chunks[-1].removeprefix("data: "))
-    assert last_payload == {"token": "", "done": True}
+    assert last_payload.get("done") is True
 
 
 # ---------------------------------------------------------------------------
@@ -91,8 +102,13 @@ async def test_sse_ends_with_done_true(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_sse_tokens_in_order(client: AsyncClient) -> None:
     """Test emitted tokens match the expected order from the service."""
-    tokens = ["Token1", "Token2", "Token3"]
-    mock = _mock_service(lambda _messages: _async_gen(tokens))
+    events = [
+        {"type": "token", "token": "Token1"},
+        {"type": "token", "token": "Token2"},
+        {"type": "token", "token": "Token3"},
+        {"type": "token", "token": "", "done": True},
+    ]
+    mock = _mock_service(lambda _messages: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -100,14 +116,12 @@ async def test_sse_tokens_in_order(client: AsyncClient) -> None:
         )
 
     chunks = [c for c in response.text.strip().split("\n\n") if c]
-    # All chunks except the final "done" line carry a token
-    token_chunks = chunks[:-1]
-    assert len(token_chunks) == len(tokens)
+    token_chunks = [c for c in chunks if json.loads(c.removeprefix("data: ")).get("type") == "token" and not json.loads(c.removeprefix("data: ")).get("done")]
+    assert len(token_chunks) == 3
 
     for i, chunk in enumerate(token_chunks):
         payload = json.loads(chunk.removeprefix("data: "))
-        assert payload["token"] == tokens[i]
-        assert payload["done"] is False
+        assert payload["token"] == f"Token{i + 1}"
 
 
 # ---------------------------------------------------------------------------
@@ -201,17 +215,15 @@ async def test_integration_mocked_service_sse_flow(
     client: AsyncClient,
     mock_chat_service: MagicMock,
 ) -> None:
-    """Integration test: mock ChatService, verify SSE flow end-to-end.
-
-    Uses the ``mock_chat_service`` fixture to replace the module-level
-    ``chat_service`` singleton and checks that every SSE chunk is correctly
-    formatted.
-    """
-    tokens = ["Hello", " ", "World"]  # fmt: skip
-    # Replace stream_chat with a plain callable that returns the async
-    # generator.  We cannot use AsyncMock for this because AsyncMock wraps
-    # return values in a coroutine, which breaks ``async for``.
-    mock_chat_service.stream_chat = lambda _msgs: _async_gen(tokens)  # noqa: E731
+    """Integration test: mock ChatService, verify SSE flow end-to-end."""
+    events = [
+        {"type": "status", "node": "routing", "label": "Analyzing..."},
+        {"type": "token", "token": "Hello"},
+        {"type": "token", "token": " "},
+        {"type": "token", "token": "World"},
+        {"type": "token", "token": "", "done": True},
+    ]
+    mock_chat_service.stream_chat = lambda _msgs: _event_gen(events)  # noqa: E731
 
     with patch("app.api.chat.chat_service", mock_chat_service):
         response = await client.post(
@@ -223,17 +235,13 @@ async def test_integration_mocked_service_sse_flow(
     assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
 
     chunks = [c for c in response.text.strip().split("\n\n") if c]
-    assert len(chunks) == len(tokens) + 1  # token chunks + final done
+    assert len(chunks) == len(events)
 
-    # Verify token chunks
-    for i, chunk in enumerate(chunks[:-1]):
-        payload = json.loads(chunk.removeprefix("data: "))
-        assert payload["token"] == tokens[i]
-        assert payload["done"] is False
-
-    # Verify final done chunk
-    last_payload = json.loads(chunks[-1].removeprefix("data: "))
-    assert last_payload == {"token": "", "done": True}
+    payloads = [json.loads(c.removeprefix("data: ")) for c in chunks]
+    assert payloads[0]["type"] == "status"
+    assert payloads[-1]["done"] is True
+    token_text = "".join(p["token"] for p in payloads if p.get("type") == "token" and not p.get("done"))
+    assert token_text == "Hello World"
 
 
 @pytest.mark.asyncio
@@ -241,12 +249,7 @@ async def test_integration_mocked_service_error(
     client: AsyncClient,
     mock_chat_service: MagicMock,
 ) -> None:
-    """Integration test: service exception yields SSE error chunk.
-
-    Verifies that when ``stream_chat`` raises an exception, the endpoint
-    returns 200 with an SSE error chunk containing the error message and
-    ``done: true``.
-    """
+    """Integration test: service exception yields SSE error chunk."""
     async def _error_stream(_messages):  # noqa: ANN202
         raise RuntimeError("LLM failure")
         yield  # pragma: no cover — makes this an async generator
