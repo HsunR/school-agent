@@ -90,6 +90,9 @@ class QueueService:
                 logger.info("Task '%s' cancelled (flag set)", task.filename)
                 break
             while self._temp_monitor.should_throttle():
+                if self._cancel_flag:
+                    logger.info("Task '%s' cancelled during throttle wait", task.filename)
+                    return
                 logger.warning("Temperature too high, pausing 5s...")
                 await asyncio.sleep(5)
             batch = chunks[i : i + UPLOAD_BATCH_SIZE]
