@@ -63,3 +63,6 @@ frontend/next-env.d.ts
 # Project specific
 *.db
 *.sqlite3
+
+# Third-party sensor DLLs
+backend/app/services/sensors/
