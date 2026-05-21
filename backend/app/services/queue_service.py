@@ -66,7 +66,7 @@ class QueueService:
             self._chunk_total = len(self._current_task.chunks)
             try:
                 await self._process_task(self._current_task)
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 logger.exception("Task '%s' failed", self._current_task.filename)
             finally:
                 self._current_task = None
@@ -114,5 +114,8 @@ class QueueService:
 
     def clear(self) -> None:
         """Signal worker to drain queue after current task finishes."""
+        if self._worker_task is None or self._worker_task.done():
+            self._cancel_flag = False
+            return
         self._cancel_flag = True
         logger.info("Queue clear requested")

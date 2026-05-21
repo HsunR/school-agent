@@ -68,7 +68,25 @@ async def test_clear_drains_queue(chroma_mock):
     task = QueueTask(id="t1", filename="a.txt", category="student_manual", chunks=["x"])
     await svc.enqueue(task)
     svc.clear()
-    assert svc._cancel_flag is True
+    await svc._worker_loop()
+    assert svc._queue.empty()
+    assert svc._cancel_flag is False
+    status = svc.get_status()
+    assert status["busy"] is False
+
+
+@pytest.mark.asyncio
+async def test_clear_when_idle_noop(chroma_mock):
+    svc = QueueService(chroma_mock)
+    # Clear when idle
+    svc.clear()
+    # Should still be able to enqueue
+    task = QueueTask(id="t1", filename="test.txt", category="student_manual", chunks=["a", "b"])
+    await svc.enqueue(task)
+    await svc._worker_loop()
+    assert chroma_mock.upload.called
+    status = svc.get_status()
+    assert status["busy"] is False
 
 
 @pytest.mark.asyncio
