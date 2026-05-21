@@ -5,6 +5,7 @@ import logging
 from typing import NamedTuple, TypedDict
 
 from app.rag.chroma_manager import ChromaManager
+from app.services.temperature_monitor import TemperatureMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,9 @@ class QueueService:
     busy or non-empty raise ``RuntimeError``.
     """
 
-    def __init__(self, chroma_manager: ChromaManager) -> None:
+    def __init__(self, chroma_manager: ChromaManager, temp_monitor: TemperatureMonitor | None = None) -> None:
         self._chroma = chroma_manager
+        self._temp_monitor = temp_monitor or TemperatureMonitor()
         self._queue: asyncio.Queue[QueueTask] = asyncio.Queue()
         self._busy = False
         self._lock = asyncio.Lock()
@@ -87,6 +89,9 @@ class QueueService:
             if self._cancel_flag:
                 logger.info("Task '%s' cancelled (flag set)", task.filename)
                 break
+            while self._temp_monitor.should_throttle():
+                logger.warning("Temperature too high, pausing 5s...")
+                await asyncio.sleep(5)
             batch = chunks[i : i + UPLOAD_BATCH_SIZE]
             await asyncio.to_thread(self._chroma.upload, task.category, batch)
             self._chunk_progress += len(batch)

@@ -127,3 +127,20 @@ async def test_clear_stops_mid_flight(chroma_mock):
     svc._cancel_flag = True
     await svc._process_task(task)
     assert chroma_mock.upload.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_worker_waits_when_temp_too_high(chroma_mock, monkeypatch):
+    from app.services.temperature_monitor import TemperatureMonitor
+
+    chunks = [f"chunk{i}" for i in range(20)]
+    task = QueueTask(id="t1", filename="hot.txt", category="student_manual", chunks=chunks)
+
+    monitor = TemperatureMonitor()
+    call_count = [0]
+    monkeypatch.setattr(monitor, "should_throttle", lambda: (call_count.__setitem__(0, call_count[0] + 1), call_count[0] <= 1)[1])
+
+    svc = QueueService(chroma_mock, temp_monitor=monitor)
+    await svc.enqueue(task)
+    await svc._worker_loop()
+    assert chroma_mock.upload.call_count == 1
