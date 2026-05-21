@@ -38,17 +38,28 @@ class TemperatureMonitor:
         except Exception:
             logger.debug("Failed to query CPU temperature via WMI", exc_info=True)
 
-        # Fallback to LibreHardwareMonitorLib (works for AMD)
-        return self._get_cpu_temp_lhm()
+        # Fallback: LibreHardwareMonitorLib (AMD via pythonnet)
+        result = self._get_cpu_temp_lhm()
+        if result is not None:
+            return result
+
+        # Fallback: PowerShell Get-Counter (universal)
+        return self._get_cpu_temp_powershell()
 
     def _get_cpu_temp_lhm(self) -> float | None:
         """Read CPU temperature via LibreHardwareMonitorLib (AMD fallback)."""
-        dll_path = os.path.join(os.path.dirname(__file__), "sensors", "LibreHardwareMonitorLib.dll")
+        dll_dir = os.path.join(os.path.dirname(__file__), "sensors")
+        dll_path = os.path.join(dll_dir, "LibreHardwareMonitorLib.dll")
         if not os.path.isfile(dll_path):
             logger.debug("LibreHardwareMonitorLib.dll not found")
             return None
         try:
             import clr
+
+            # Ensure all dependency DLLs are findable
+            import sys
+            if dll_dir not in sys.path:
+                sys.path.insert(0, dll_dir)
 
             clr.AddReference(dll_path)
             from LibreHardwareMonitor.Hardware import Computer, SensorType
@@ -60,12 +71,46 @@ class TemperatureMonitor:
                 for hardware in computer.Hardware:
                     hardware.Update()
                     for sensor in hardware.Sensors:
-                        if sensor.SensorType == SensorType.Temperature and "CPU" in sensor.Name:
-                            return round(float(sensor.Value), 2)
+                        if sensor.SensorType != SensorType.Temperature:
+                            continue
+                        name = str(sensor.Name)
+                        val = sensor.Value
+                        if val is None or float(val) <= 0:
+                            continue
+                        if "CPU" in name or "Tctl" in name or "Tdie" in name or "Core" in name:
+                            return round(float(val), 2)
             finally:
                 computer.Close()
         except Exception:
             logger.debug("Failed to query CPU temperature via LHM", exc_info=True)
+        return None
+
+    def _get_cpu_temp_powershell(self) -> float | None:
+        """Read CPU temperature via PowerShell Get-Counter as fallback.
+
+        Get-Counter returns thermal zone temperature in Kelvin.
+        """
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                 "Get-Counter '\\Thermal Zone Information(*)\\Temperature' | "
+                 "Select-Object -ExpandProperty CounterSamples | "
+                 "ForEach-Object { Write-Output $_.CookedValue }"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            for line in result.stdout.strip().splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        temp_k = float(line)
+                        if temp_k > 0:
+                            return round(temp_k - 273.15, 2)
+                    except ValueError:
+                        continue
+        except Exception:
+            logger.debug("Failed to query CPU temperature via PowerShell", exc_info=True)
         return None
 
     def get_gpu_temp(self) -> float | None:

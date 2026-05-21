@@ -41,6 +41,8 @@ class TestCpuTemperature:
             return original_import(name, *args, **kwargs)
         monkeypatch.setattr(builtins, "__import__", mock_import)
         monitor = TemperatureMonitor()
+        monkeypatch.setattr(monitor, "_get_cpu_temp_lhm", lambda: None)
+        monkeypatch.setattr(monitor, "_get_cpu_temp_powershell", lambda: None)
         assert monitor.get_cpu_temp() is None
 
     def test_cpu_temp_returns_none_wmi_query_fails(self, monkeypatch):
@@ -48,6 +50,8 @@ class TestCpuTemperature:
         mock_wmi_cls.return_value.MSAcpi_ThermalZoneTemperature.side_effect = Exception("WMI query failed")
         monkeypatch.setitem(sys.modules, "wmi", _mock_wmi_module(mock_wmi_cls))
         monitor = TemperatureMonitor()
+        monkeypatch.setattr(monitor, "_get_cpu_temp_lhm", lambda: None)
+        monkeypatch.setattr(monitor, "_get_cpu_temp_powershell", lambda: None)
         assert monitor.get_cpu_temp() is None
 
     def test_cpu_temp_falls_back_to_lhm_when_wmi_returns_none(self, monkeypatch):
@@ -64,7 +68,38 @@ class TestCpuTemperature:
         monkeypatch.setitem(sys.modules, "wmi", _mock_wmi_module(mock_wmi_cls))
         monitor = TemperatureMonitor()
         monkeypatch.setattr(monitor, "_get_cpu_temp_lhm", lambda: None)
+        monkeypatch.setattr(monitor, "_get_cpu_temp_powershell", lambda: None)
         assert monitor.get_cpu_temp() is None
+
+    def test_cpu_temp_falls_back_to_powershell_when_wmi_and_lhm_fail(self, monkeypatch):
+        mock_wmi_cls = MagicMock()
+        mock_wmi_cls.return_value.MSAcpi_ThermalZoneTemperature.return_value = []
+        monkeypatch.setitem(sys.modules, "wmi", _mock_wmi_module(mock_wmi_cls))
+        monitor = TemperatureMonitor()
+        monkeypatch.setattr(monitor, "_get_cpu_temp_lhm", lambda: None)
+        monkeypatch.setattr(monitor, "_get_cpu_temp_powershell", lambda: 75.3)
+        assert monitor.get_cpu_temp() == 75.3
+
+
+class TestPowershellTemperature:
+    def test_powershell_returns_temperature_in_celsius(self, monkeypatch):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "353.0\n"
+        monkeypatch.setattr("app.services.temperature_monitor.subprocess.run", lambda *a, **kw: mock_result)
+        monitor = TemperatureMonitor()
+        temp = monitor._get_cpu_temp_powershell()
+        # 353K - 273.15 = 79.85°C
+        assert temp is not None
+        assert abs(temp - 79.85) < 0.01
+
+    def test_powershell_returns_none_on_failure(self, monkeypatch):
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        monkeypatch.setattr("app.services.temperature_monitor.subprocess.run", lambda *a, **kw: mock_result)
+        monitor = TemperatureMonitor()
+        assert monitor._get_cpu_temp_powershell() is None
 
 
 class TestGpuTemperature:
