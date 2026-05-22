@@ -1,7 +1,7 @@
 """LangGraph state graph definition for the conversational agent.
 
 Graph:
-    START -> routing_node
+    START -> intent_node -> routing_node
                |
                v (should_retrieve)
           +----+----+

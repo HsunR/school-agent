@@ -92,8 +92,8 @@ class TestGraphStructure:
         node_names = list(graph.nodes.keys())
         assert "answer_node" in node_names, f"Expected 'answer_node' in nodes, got {node_names}"
 
-    def test_start_to_routing_edge(self, mock_chroma):
-        """There should be an edge from START to routing_node."""
+    def test_start_to_intent_to_routing_edges(self, mock_chroma):
+        """There should be edges from START to intent_node to routing_node."""
         llm = MockStreamingChatModel()
         graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         g = graph.get_graph()
