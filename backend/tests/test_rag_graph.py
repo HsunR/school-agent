@@ -44,7 +44,10 @@ def test_routing_node_parses_json(mock_writer):
 @patch("app.graph.graph.get_stream_writer")
 def test_routing_node_fallback_on_bad_json(mock_writer):
     llm = MagicMock()
-    llm.invoke.return_value = AIMessage(content="not json")
+    llm.invoke.side_effect = [
+        AIMessage(content="not json"),
+        AIMessage(content="also not json"),
+    ]
     state: ChatState = {
         "messages": [HumanMessage(content="hi")],
         "search_manual": False,
@@ -60,6 +63,30 @@ def test_routing_node_fallback_on_bad_json(mock_writer):
     assert result["search_forum"] is False
     assert result["search_query_manual"] == ""
     assert result["search_query_forum"] == ""
+    assert llm.invoke.call_count == 2
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_routing_node_retry_succeeds(mock_writer):
+    llm = MagicMock()
+    llm.invoke.side_effect = [
+        AIMessage(content="bad json"),
+        AIMessage(content='{"search_manual": true, "search_forum": false, "search_query_manual": "宿舍", "search_query_forum": ""}'),
+    ]
+    state: ChatState = {
+        "messages": [HumanMessage(content="宿舍问题")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+    }
+    result = routing_node(state, llm)
+    assert result["search_manual"] is True
+    assert result["search_query_manual"] == "宿舍"
+    assert llm.invoke.call_count == 2
 
 
 @patch("app.graph.graph.get_stream_writer")
@@ -233,9 +260,9 @@ async def test_answer_node_falls_back_to_raw_chunks_when_all_scores_zero(mock_wr
 
     chat_llm = MagicMock()
     async def _mock_astream(messages):
-        # Capture the context from the system message
+        # Capture the context from the human message (retrieval context is injected there)
         for msg in messages:
-            if isinstance(msg, SystemMessage):
+            if isinstance(msg, HumanMessage):
                 assert "宿舍管理费每学期500元" in msg.content, (
                     "Expected raw chunk content in context, got: %s", msg.content
                 )
@@ -264,14 +291,15 @@ async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
     """answer_node should sort by score descending and take only top_k_scored."""
     from app.graph.graph import answer_node
 
-    chat_llm = MagicMock()
-    captured_context: list[str] = []
+    captured: list[str] = []
 
     async def _mock_astream(messages):
         for msg in messages:
-            if isinstance(msg, SystemMessage):
-                captured_context.append(msg.content)
+            if isinstance(msg, HumanMessage):
+                captured.append(msg.content)
         yield AIMessageChunk(content="Hello World!")
+
+    chat_llm = MagicMock()
     chat_llm.astream = _mock_astream
 
     state = {
@@ -284,19 +312,19 @@ async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
         "forum_chunks": ["帖A", "帖B", "帖C", "帖D"],
         "scored_chunks": [
             {"original": "帖A", "source": "学校贴吧", "score": 90},
-            {"original": "帖B", "source": "学校贴吧", "score": 20},
             {"original": "帖C", "source": "学校贴吧", "score": 80},
+            {"original": "帖B", "source": "学校贴吧", "score": 20},
             {"original": "帖D", "source": "学校贴吧", "score": 60},
         ],
     }
     result = await answer_node(state, chat_llm, top_k_scored=2)
     assert "messages" in result
-    context = captured_context[0] if captured_context else ""
-    # top 2 by score: 帖A(90) and 帖C(80)
-    assert "帖A" in context
-    assert "帖C" in context
-    assert "帖B" not in context
-    assert "帖D" not in context
+    assert captured, "No HumanMessage captured"
+    # top 2 by score: 帖A(90) and 帖C(80) — injected into HumanMessage
+    assert "帖A" in captured[0]
+    assert "帖C" in captured[0]
+    assert "帖B" not in captured[0]
+    assert "帖D" not in captured[0]
 
 
 @patch("app.graph.graph.get_stream_writer")
@@ -328,7 +356,7 @@ def test_intent_node_emits_intent_event(mock_writer):
 
 @patch("app.graph.graph.get_stream_writer")
 def test_intent_node_fallback_on_bad_json(mock_writer):
-    """Verify intent_node falls back to raw input when LLM returns bad JSON."""
+    """Verify intent_node falls back to raw input when both attempts return bad JSON."""
     from app.graph.graph import intent_node
 
     chat_state = {
@@ -344,10 +372,42 @@ def test_intent_node_fallback_on_bad_json(mock_writer):
         "compressed_context": "",
     }
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = AIMessage(content="not valid json")
+    mock_llm.invoke.side_effect = [
+        AIMessage(content="not valid json"),
+        AIMessage(content="still not valid"),
+    ]
     result = intent_node(chat_state, mock_llm)
     assert result["optimized_query"] == "原始问题"
     assert result["compressed_context"] == ""
+    assert mock_llm.invoke.call_count == 2
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_intent_node_retry_succeeds(mock_writer):
+    """Verify intent_node retries once on bad JSON, then succeeds."""
+    from app.graph.graph import intent_node
+
+    chat_state = {
+        "messages": [HumanMessage(content="原始问题")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+        "optimized_query": "",
+        "compressed_context": "",
+    }
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = [
+        AIMessage(content="not valid json"),
+        AIMessage(content='{"optimized_query": "重试后的问题", "compressed_context": "上下文"}'),
+    ]
+    result = intent_node(chat_state, mock_llm)
+    assert result["optimized_query"] == "重试后的问题"
+    assert result["compressed_context"] == "上下文"
+    assert mock_llm.invoke.call_count == 2
 
 
 @patch("app.graph.graph.get_stream_writer")
@@ -411,14 +471,17 @@ async def test_answer_node_injects_compressed_context():
     from app.graph.graph import answer_node
     from langchain_core.messages import HumanMessage
 
-    chat_llm = MagicMock()
-    captured_context: list[str] = []
+    from unittest.mock import AsyncMock
+
+    captured: list[str] = []
 
     async def _mock_astream(messages):
         for msg in messages:
-            if isinstance(msg, SystemMessage):
-                captured_context.append(msg.content)
+            if isinstance(msg, HumanMessage):
+                captured.append(msg.content)
         yield AIMessage(content="回答")
+
+    chat_llm = MagicMock(spec=["astream"])
     chat_llm.astream = _mock_astream
 
     state = {
@@ -436,7 +499,8 @@ async def test_answer_node_injects_compressed_context():
     with patch("app.graph.graph.get_stream_writer"):
         await answer_node(state, chat_llm)
 
-    assert any("对话摘要（历史上下文）" in c for c in captured_context), "compressed_context not found"
+    assert captured, f"No HumanMessage captured. Total messages captured={captured}"
+    assert "对话摘要（历史上下文）" in captured[0], f"compressed_context not found. captured={captured[0][:100]!r}"
 
 
 @pytest.mark.asyncio

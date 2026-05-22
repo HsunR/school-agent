@@ -269,17 +269,17 @@ def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
     )
     optimized_query = last_msg
     compressed_context = ""
-    try:
-        response: AIMessage = intent_llm.invoke([
+    parsed = _parse_json_llm_response(
+        intent_llm,
+        [
             SystemMessage(content=INTENT_SYSTEM_PROMPT),
             HumanMessage(content=user_text),
-        ])
-        text = _extract_json(response.content)
-        parsed = json.loads(text)
+        ],
+        expected_format='{"optimized_query": "...", "compressed_context": "..."}',
+    )
+    if parsed:
         optimized_query = str(parsed.get("optimized_query", last_msg))
         compressed_context = str(parsed.get("compressed_context", ""))
-    except Exception:
-        logger.exception("Intent parsing failed, falling back to raw input")
     writer({
         "type": "intent",
         "optimized_query": optimized_query,
@@ -294,19 +294,23 @@ def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
     writer = get_stream_writer()
     raw = state.get("optimized_query", "")
     last_msg = raw.strip() or (state["messages"][-1].content if state["messages"] else "")
-    response: AIMessage = llm.invoke([
-        SystemMessage(content=ROUTING_SYSTEM_PROMPT),
-        HumanMessage(content=last_msg),
-    ])
-    try:
-        text = _extract_json(response.content)
-        parsed = json.loads(text)
+    parsed = _parse_json_llm_response(
+        llm,
+        [
+            SystemMessage(content=ROUTING_SYSTEM_PROMPT),
+            HumanMessage(content=last_msg),
+        ],
+        expected_format=(
+            '{"search_manual": true/false, "search_forum": true/false, '
+            '"search_query_manual": "...", "search_query_forum": "..."}'
+        ),
+    )
+    if parsed:
         search_manual = bool(parsed.get("search_manual", False))
         search_forum = bool(parsed.get("search_forum", False))
         search_query_manual = parsed.get("search_query_manual", "")
         search_query_forum = parsed.get("search_query_forum", "")
-    except (json.JSONDecodeError, AttributeError):
-        logger.warning("Routing parse failed, defaulting to no search")
+    else:
         search_manual = False
         search_forum = False
         search_query_manual = ""
