@@ -170,7 +170,8 @@ def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
 def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
     """Classify whether the user question needs each knowledge source."""
     writer = get_stream_writer()
-    last_msg = state.get("optimized_query") or (state["messages"][-1].content if state["messages"] else "")
+    raw = state.get("optimized_query", "")
+    last_msg = raw.strip() or (state["messages"][-1].content if state["messages"] else "")
     response: AIMessage = llm.invoke([
         SystemMessage(content=ROUTING_SYSTEM_PROMPT),
         HumanMessage(content=last_msg),
@@ -269,7 +270,8 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         writer({"type": "scoring", "source": "done", "done": True})
         return {"scored_chunks": []}
 
-    user_question = state.get("optimized_query") or (state["messages"][-1].content if state["messages"] else "")
+    raw = state.get("optimized_query", "")
+    user_question = raw.strip() or (state["messages"][-1].content if state["messages"] else "")
     scored_chunks: list[dict] = []
     source_counters: dict[str, int] = {}
 

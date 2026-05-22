@@ -405,3 +405,71 @@ def test_scoring_node_uses_optimized_query(mock_writer):
     call_text = str(mock_llm.invoke.call_args)
     assert "优化后的问题" in call_text
     assert "原始问题" not in call_text
+
+
+@pytest.mark.asyncio
+async def test_answer_node_injects_compressed_context():
+    """Verify answer_node prepends compressed_context SystemMessage."""
+    from app.graph.graph import answer_node
+    from langchain_core.messages import HumanMessage
+
+    chat_llm = MagicMock()
+    captured_context: list[str] = []
+
+    async def _mock_astream(messages):
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                captured_context.append(msg.content)
+        yield AIMessage(content="回答")
+    chat_llm.astream = _mock_astream
+
+    state = {
+        "messages": [HumanMessage(content="用户问题")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": ["宿舍管理费500元"],
+        "forum_chunks": [],
+        "scored_chunks": [{"original": "宿舍管理费500元", "source": "学生手册", "score": 85, "compressed": "500元"}],
+        "optimized_query": "优化问题",
+        "compressed_context": "用户询问关于宿舍管理费的问题",
+    }
+    with patch("app.graph.graph.get_stream_writer"):
+        await answer_node(state, chat_llm)
+
+    assert any("对话摘要（历史上下文）" in c for c in captured_context), "compressed_context not found"
+
+
+@pytest.mark.asyncio
+async def test_answer_node_skips_empty_compressed_context():
+    """Verify answer_node skips compressed_context when empty."""
+    from app.graph.graph import answer_node
+    from langchain_core.messages import HumanMessage
+
+    chat_llm = MagicMock()
+    captured_context: list[str] = []
+
+    async def _mock_astream(messages):
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                captured_context.append(msg.content)
+        yield AIMessage(content="回答")
+    chat_llm.astream = _mock_astream
+
+    state = {
+        "messages": [HumanMessage(content="用户问题")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": ["宿舍管理费500元"],
+        "forum_chunks": [],
+        "scored_chunks": [],
+        "optimized_query": "优化问题",
+        "compressed_context": "",
+    }
+    with patch("app.graph.graph.get_stream_writer"):
+        await answer_node(state, chat_llm)
+
+    assert not any("对话摘要（历史上下文）" in c for c in captured_context), "compressed_context should not appear"
