@@ -153,19 +153,21 @@ class TestTimeout:
         settings = Settings(llm_timeout=15)
         with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
             ChatService(settings)
-            assert mock_llm_cls.call_count == 3
-            # chat and routing use llm_timeout; scoring uses hardcoded 15
-            for call_args in mock_llm_cls.call_args_list[:2]:
-                assert call_args.kwargs.get("timeout") == 15
+            assert mock_llm_cls.call_count == 4
+            # chat(0), routing(1) use llm_timeout; scoring(2) hardcoded 15; intent(3) uses llm_timeout
+            for idx in [0, 1, 3]:
+                assert mock_llm_cls.call_args_list[idx].kwargs.get("timeout") == 15
+            assert mock_llm_cls.call_args_list[2].kwargs.get("timeout") == 15
 
     @pytest.mark.asyncio
     async def test_default_timeout_is_30(self):
         """Default llm_timeout should be 30."""
         with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
             ChatService(Settings(llm_scoring_api_key="test-key"))
-            assert mock_llm_cls.call_count == 3
-            for call_args in mock_llm_cls.call_args_list[:2]:
-                assert call_args.kwargs.get("timeout") == 30
+            assert mock_llm_cls.call_count == 4
+            for idx in [0, 1, 3]:
+                assert mock_llm_cls.call_args_list[idx].kwargs.get("timeout") == 30
+            assert mock_llm_cls.call_args_list[2].kwargs.get("timeout") == 15
 
     @pytest.mark.asyncio
     async def test_custom_timeout_value(self):
@@ -173,9 +175,10 @@ class TestTimeout:
         settings = Settings(llm_timeout=60, llm_scoring_api_key="test-key")
         with patch("app.services.chat_service.ChatOpenAI") as mock_llm_cls:
             ChatService(settings)
-            assert mock_llm_cls.call_count == 3
-            for call_args in mock_llm_cls.call_args_list[:2]:
-                assert call_args.kwargs.get("timeout") == 60
+            assert mock_llm_cls.call_count == 4
+            for idx in [0, 1, 3]:
+                assert mock_llm_cls.call_args_list[idx].kwargs.get("timeout") == 60
+            assert mock_llm_cls.call_args_list[2].kwargs.get("timeout") == 15
 
     @pytest.mark.asyncio
     async def test_stream_chat_with_simulated_timeout(self):
