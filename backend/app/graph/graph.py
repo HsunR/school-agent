@@ -79,6 +79,19 @@ SCORING_SYSTEM_PROMPT = (
     '{"score": 85, "compressed": "裁剪后保留的原文片段（逐字复制，不做任何改动）"}'
 )
 
+INTENT_SYSTEM_PROMPT = (
+    "You are an intent analyzer for a campus assistant. "
+    "Given the user's question and conversation history, perform two tasks:\n"
+    "1. **Optimize the user question** — Fix typos, fill in omitted context, "
+    "extract the core query intent. Output a clear, self-contained question.\n"
+    "2. **Compress the conversation history** — Summarize recent conversation "
+    "into a concise paragraph, preserving key facts, user goals, and any answers already given.\n\n"
+    "Output valid JSON only:\n"
+    '{{"optimized_query": "...", "compressed_context": "..."}}\n\n'
+    "Conversation history:\n{formatted_history}\n\n"
+    "User question: {last_message}"
+)
+
 # ── Constants ──
 
 SOURCE_MANUAL_LABEL = "学生手册"
@@ -114,6 +127,45 @@ class ChatState(TypedDict):
 
 
 # ── Nodes ──
+
+def _format_history(messages: Sequence[BaseMessage]) -> str:
+    parts = []
+    for m in messages:
+        role = "user" if isinstance(m, HumanMessage) else "assistant"
+        content = m.content[:200] if m.content else ""
+        parts.append(f"{role}: {content}")
+    return "\n".join(parts[-6:])
+
+
+def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
+    writer = get_stream_writer()
+    last_msg = state["messages"][-1].content if state["messages"] else ""
+    history_msgs = list(state["messages"][:-1])
+    formatted_history = _format_history(history_msgs)
+    prompt_text = INTENT_SYSTEM_PROMPT.format(
+        formatted_history=formatted_history, last_message=last_msg
+    )
+    optimized_query = last_msg
+    compressed_context = ""
+    try:
+        response: AIMessage = intent_llm.invoke([
+            SystemMessage(content=prompt_text),
+        ])
+        text = response.content.strip()
+        text = text.removeprefix("```json").removesuffix("```").strip()
+        parsed = json.loads(text)
+        optimized_query = str(parsed.get("optimized_query", last_msg))
+        compressed_context = str(parsed.get("compressed_context", ""))
+    except Exception:
+        logger.exception("Intent parsing failed, falling back to raw input")
+    writer({
+        "type": "intent",
+        "optimized_query": optimized_query,
+        "compressed_context": compressed_context,
+        "label": "正在理解你的问题...",
+    })
+    return {"optimized_query": optimized_query, "compressed_context": compressed_context}
+
 
 def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
     """Classify whether the user question needs each knowledge source."""
@@ -333,6 +385,7 @@ def should_retrieve(state: ChatState) -> str:
 # ── Graph builder ──
 
 def compile_graph(
+    intent_llm: BaseChatModel,
     routing_llm: BaseChatModel,
     chroma: ChromaManager,
     chat_llm: BaseChatModel,
@@ -353,6 +406,7 @@ def compile_graph(
     """
     builder = StateGraph(ChatState)
 
+    builder.add_node("intent_node", lambda state: intent_node(state, intent_llm))
     builder.add_node("routing_node", lambda state: routing_node(state, routing_llm))
     builder.add_node("manual_retrieval_node", lambda state: manual_retrieval_node(state, chroma))
     builder.add_node("forum_retrieval_node", lambda state: forum_retrieval_node(state, chroma))
@@ -363,7 +417,8 @@ def compile_graph(
 
     builder.add_node("answer_node", _answer_node)
 
-    builder.add_edge(START, "routing_node")
+    builder.add_edge(START, "intent_node")
+    builder.add_edge("intent_node", "routing_node")
     builder.add_conditional_edges("routing_node", should_retrieve, {
         "manual_retrieval_node": "manual_retrieval_node",
         "forum_retrieval_node": "forum_retrieval_node",

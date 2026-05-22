@@ -1,5 +1,6 @@
 """Tests for the RAG-enabled LangGraph pipeline."""
 
+import json
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -298,3 +299,54 @@ async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
     assert "帖C内容" in context
     assert "帖B内容" not in context
     assert "帖D内容" not in context
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_intent_node_emits_intent_event(mock_writer):
+    """Verify intent_node emits correct optimized_query and compressed_context."""
+    from app.graph.graph import intent_node
+
+    chat_state = {
+        "messages": [HumanMessage(content="旷课了怎么办")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+        "optimized_query": "",
+        "compressed_context": "",
+    }
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content=json.dumps({
+        "optimized_query": "旷课处罚规定查询",
+        "compressed_context": "用户询问旷课后果",
+    }))
+    result = intent_node(chat_state, mock_llm)
+    assert result["optimized_query"] == "旷课处罚规定查询"
+    assert result["compressed_context"] == "用户询问旷课后果"
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_intent_node_fallback_on_bad_json(mock_writer):
+    """Verify intent_node falls back to raw input when LLM returns bad JSON."""
+    from app.graph.graph import intent_node
+
+    chat_state = {
+        "messages": [HumanMessage(content="原始问题")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+        "optimized_query": "",
+        "compressed_context": "",
+    }
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content="not valid json")
+    result = intent_node(chat_state, mock_llm)
+    assert result["optimized_query"] == "原始问题"
+    assert result["compressed_context"] == ""

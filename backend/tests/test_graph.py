@@ -54,13 +54,13 @@ class TestGraphCompilation:
     def test_graph_compiles(self, mock_chroma):
         """compile_graph should return a compiled graph."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         assert graph is not None
 
     def test_graph_is_compiled(self, mock_chroma):
         """The returned graph should be a CompiledStateGraph."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         assert "compile" not in dir(type(graph)) or hasattr(graph, "invoke")
         assert hasattr(graph, "invoke")
         assert hasattr(graph, "ainvoke")
@@ -73,14 +73,14 @@ class TestGraphStructure:
     def test_has_routing_node(self, mock_chroma):
         """Graph should have a 'routing_node' node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         node_names = list(graph.nodes.keys())
         assert "routing_node" in node_names, f"Expected 'routing_node' in nodes, got {node_names}"
 
     def test_has_retrieval_nodes(self, mock_chroma):
         """Graph should have retrieval nodes for both collections."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         node_names = list(graph.nodes.keys())
         assert "manual_retrieval_node" in node_names
         assert "forum_retrieval_node" in node_names
@@ -88,25 +88,28 @@ class TestGraphStructure:
     def test_has_answer_node(self, mock_chroma):
         """Graph should have an 'answer_node' node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         node_names = list(graph.nodes.keys())
         assert "answer_node" in node_names, f"Expected 'answer_node' in nodes, got {node_names}"
 
     def test_start_to_routing_edge(self, mock_chroma):
         """There should be an edge from START to routing_node."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         g = graph.get_graph()
         edges = g.edges
         edge_pairs = [(e.source, e.target) for e in edges]
-        assert ("__start__", "routing_node") in edge_pairs, (
-            f"Expected START->routing_node edge, got {edge_pairs}"
+        assert ("__start__", "intent_node") in edge_pairs, (
+            f"Expected START->intent_node edge, got {edge_pairs}"
+        )
+        assert ("intent_node", "routing_node") in edge_pairs, (
+            f"Expected intent_node->routing_node edge, got {edge_pairs}"
         )
 
     def test_routing_to_conditional_edges(self, mock_chroma):
         """Routing node should have conditional edges to retrieval or answer nodes."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         g = graph.get_graph()
         edges = g.edges
         routing_edges = [(e.source, e.target) for e in edges if e.source == "routing_node"]
@@ -124,7 +127,7 @@ class TestGraphInvocation:
     async def test_ainvoke_returns_messages(self, mock_chroma):
         """Graph ainvoke should return a dict with 'messages' key."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
         assert isinstance(result, dict)
         assert "messages" in result
@@ -133,7 +136,7 @@ class TestGraphInvocation:
     async def test_ainvoke_sets_search_flags(self, mock_chroma):
         """Graph should set search flags to False when routing can't parse JSON."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         result = await graph.ainvoke({"messages": [HumanMessage(content="test")]})
         assert result.get("search_manual") is False
         assert result.get("search_forum") is False
@@ -144,7 +147,7 @@ class TestGraphInvocation:
     async def test_ainvoke_with_system_message(self, mock_chroma):
         """Graph should work with system + user messages."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
         result = await graph.ainvoke({
             "messages": [
                 SystemMessage(content="Be concise"),
@@ -162,7 +165,7 @@ class TestGraphInvocation:
         routing_llm = MockStreamingChatModel()
         routing_llm.streaming = False
         chat_llm = MockStreamingChatModel()
-        graph = compile_graph(routing_llm, mock_chroma, chat_llm, routing_llm)
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
 
         state: ChatState = {
             "messages": [HumanMessage(content="test")],
@@ -209,7 +212,7 @@ class TestGraphInvocation:
     async def test_conversation_context_preserved(self, mock_chroma):
         """Graph should preserve prior conversation context (messages pass through)."""
         llm = MockStreamingChatModel()
-        graph = compile_graph(llm, mock_chroma, llm, llm)
+        graph = compile_graph(llm, llm, mock_chroma, llm, llm)
 
         result = await graph.ainvoke({
             "messages": [HumanMessage(content="First message")],
@@ -264,7 +267,7 @@ class TestAnswerNode:
         chat_llm = MagicMock(spec=["astream"])
         chat_llm.astream.return_value = _async_gen([AIMessageChunk(content="Hello!")])
 
-        graph = compile_graph(routing_llm, mock_chroma, chat_llm, routing_llm)
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
 
         result = await graph.ainvoke({
             "messages": [HumanMessage(content="天气怎么样")],

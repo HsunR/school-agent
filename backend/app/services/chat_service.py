@@ -69,7 +69,16 @@ class ChatService:
             timeout=15,
         )
 
+        self.intent_llm = ChatOpenAI(
+            model=settings.llm_intent_model,
+            base_url=settings.llm_intent_base_url,
+            api_key=settings.llm_intent_api_key,
+            streaming=False,
+            timeout=settings.llm_timeout,
+        )
+
         self.graph = compile_graph(
+            self.intent_llm,
             self.routing_llm, self.chroma, self.chat_llm, self.scoring_llm,
             top_k_scored=settings.rag_top_k_scored,
         )
