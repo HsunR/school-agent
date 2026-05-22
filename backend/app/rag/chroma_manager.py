@@ -37,8 +37,19 @@ class ChromaManager:
         self._client = chromadb.PersistentClient(path=self.persist_dir)
 
     def _collection(self, name: str):
-        """Get or create a ChromaDB collection by name."""
-        return self._client.get_or_create_collection(name)
+        """Get or create a ChromaDB collection by name, with health check."""
+        collection = self._client.get_or_create_collection(name)
+        # Guard: verify collection is usable (not dim=None with missing segment dir)
+        try:
+            collection.count()
+        except Exception:
+            logger.warning("Collection '%s' is corrupted, resetting...", name)
+            try:
+                self._client.delete_collection(name)
+            except Exception:
+                pass
+            collection = self._client.get_or_create_collection(name)
+        return collection
 
     UPLOAD_BATCH_SIZE = 50
 

@@ -59,28 +59,28 @@ async def test_preview_missing_category_returns_422(client: AsyncClient) -> None
 
 @pytest.mark.asyncio
 async def test_stats_endpoint_returns_list(client: AsyncClient) -> None:
-    """Test that the stats endpoint returns a list of category counts.
-
-    This test may fail if ChromaDB is not initialized — that is expected
-    integration behaviour. The important thing is the routing and response
-    shape.
-    """
-    resp = await client.get("/api/admin/stats")
-    if resp.status_code == 200:
-        data = resp.json()
-        assert isinstance(data, list)
-        categories = [s["category"] for s in data]
-        for c in ALL_COLLECTIONS:
-            assert c in categories
+    """Test that the stats endpoint returns a list of category counts."""
+    with patch("app.api.admin._get_chroma") as mock_get:
+        mock_chroma = MagicMock()
+        mock_chroma.stats.return_value = {"category": "student_manual", "total_count": 42}
+        mock_get.return_value = mock_chroma
+        resp = await client.get("/api/admin/stats")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
 
 
 @pytest.mark.asyncio
 async def test_clear_category_returns_cleared(client: AsyncClient) -> None:
     """Test that clearing a specific category returns that category."""
-    resp = await client.delete("/api/admin/data?category=student_manual")
-    if resp.status_code == 200:
-        data = resp.json()
-        assert data["cleared"] == ["student_manual"]
+    with patch("app.api.admin._get_chroma") as mock_get:
+        mock_chroma = MagicMock()
+        mock_get.return_value = mock_chroma
+        resp = await client.delete("/api/admin/data?category=student_manual")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["cleared"] == ["student_manual"]
 
 
 @pytest.mark.asyncio
@@ -114,12 +114,16 @@ async def test_delete_single_record_invalid_category_returns_400(client: AsyncCl
 @pytest.mark.asyncio
 async def test_delete_nonexistent_record_returns_zero(client: AsyncClient) -> None:
     """Test that deleting a non-existent ID returns deleted=0 (not an error)."""
-    resp = await client.delete(
-        "/api/admin/data?category=student_manual&id=nonexistent_hash"
-    )
-    if resp.status_code == 200:
-        data = resp.json()
-        assert data["deleted"] == 0
+    with patch("app.api.admin._get_chroma") as mock_get:
+        mock_chroma = MagicMock()
+        mock_chroma.delete_by_id.return_value = 0
+        mock_get.return_value = mock_chroma
+        resp = await client.delete(
+            "/api/admin/data?category=student_manual&id=nonexistent_hash"
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["deleted"] == 0
 
 
 # ---------------------------------------------------------------------------
