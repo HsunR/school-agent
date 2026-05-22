@@ -257,3 +257,50 @@ async def test_answer_node_falls_back_to_raw_chunks_when_all_scores_zero(mock_wr
     }
     result = await answer_node(state, chat_llm)
     assert "messages" in result
+
+
+@patch("app.graph.graph.get_stream_writer")
+@pytest.mark.asyncio
+async def test_answer_node_selects_top_k_by_score(mock_writer):
+    """answer_node should sort scored chunks by score and take top K per source."""
+    from app.graph.graph import answer_node
+
+    chat_llm = MagicMock()
+    captured_messages = []
+
+    async def _mock_astream(messages):
+        nonlocal captured_messages
+        captured_messages = messages
+        yield AIMessageChunk(content="done")
+    chat_llm.astream = _mock_astream
+
+    state = {
+        "messages": [HumanMessage(content="宿舍")],
+        "search_manual": True,
+        "search_forum": True,
+        "search_query_manual": "宿舍",
+        "search_query_forum": "宿舍",
+        "manual_chunks": ["m1", "m2", "m3"],
+        "forum_chunks": ["f1", "f2", "f3"],
+        "scored_chunks": [
+            {"original": "m3", "source": "学生手册", "score": 95, "compressed": "m3c"},
+            {"original": "m1", "source": "学生手册", "score": 40, "compressed": "m1c"},
+            {"original": "m2", "source": "学生手册", "score": 80, "compressed": "m2c"},
+            {"original": "f2", "source": "学校贴吧", "score": 90, "compressed": "f2c"},
+            {"original": "f1", "source": "学校贴吧", "score": 30, "compressed": "f1c"},
+        ],
+        "rag_top_k_manual": 2,
+        "rag_top_k_forum": 1,
+    }
+
+    await answer_node(state, chat_llm)
+    context = next(
+        (m.content for m in captured_messages if isinstance(m, SystemMessage)), ""
+    )
+    # Manual: top 2 by score → m3 (95) + m2 (80)
+    assert "m3c" in context
+    assert "m2c" in context
+    assert "m1c" not in context  # score 40, below top 2
+    # Forum: top 1 by score → f2 (90)
+    assert "f2c" in context
+    assert "f1c" not in context  # score 30, below top 1

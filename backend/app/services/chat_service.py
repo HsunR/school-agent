@@ -95,6 +95,11 @@ class ChatService:
             "search_forum": False,
             "search_query_manual": "",
             "search_query_forum": "",
+            "manual_chunks": [],
+            "forum_chunks": [],
+            "scored_chunks": [],
+            "rag_top_k_manual": self.settings.rag_top_k_manual,
+            "rag_top_k_forum": self.settings.rag_top_k_forum,
         }
 
         try:

@@ -111,6 +111,8 @@ class ChatState(TypedDict):
     manual_chunks: list[str]
     forum_chunks: list[str]
     scored_chunks: list[dict]
+    rag_top_k_manual: int
+    rag_top_k_forum: int
 
 
 # ── Nodes ──
@@ -280,15 +282,23 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
     scored = state.get("scored_chunks", [])
     manual_chunks = state.get("manual_chunks", [])
     forum_chunks = state.get("forum_chunks", [])
+    top_k_manual = state.get("rag_top_k_manual", 5)
+    top_k_forum = state.get("rag_top_k_forum", 5)
 
     if scored and any(c["score"] > 0 and c["compressed"] for c in scored):
+        manual_scored = sorted(
+            [c for c in scored if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]],
+            key=lambda c: c["score"], reverse=True,
+        )[:top_k_manual]
+        forum_scored = sorted(
+            [c for c in scored if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0 and c["compressed"]],
+            key=lambda c: c["score"], reverse=True,
+        )[:top_k_forum]
         manual_context = "\n\n".join(
-            c["compressed"][:MAX_COMPRESSED_CHARS] for c in scored
-            if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]
+            c["compressed"][:MAX_COMPRESSED_CHARS] for c in manual_scored
         )
         forum_context = "\n\n".join(
-            c["compressed"][:MAX_COMPRESSED_CHARS] for c in scored
-            if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0 and c["compressed"]
+            c["compressed"][:MAX_COMPRESSED_CHARS] for c in forum_scored
         )
         if not manual_context:
             manual_context = "（未检索到相关内容）"
