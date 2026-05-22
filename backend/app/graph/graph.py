@@ -353,12 +353,6 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: i
     has_context = bool(manual_chunks or forum_chunks)
     messages = list(state["messages"])
 
-    compressed_context = state.get("compressed_context", "")
-    if compressed_context:
-        messages.insert(0, SystemMessage(
-            content=f"对话摘要（历史上下文）：{compressed_context}"
-        ))
-
     if has_context:
         context_msg = SystemMessage(
             RETRIEVAL_CONTEXT_TEMPLATE.format(
@@ -367,6 +361,12 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: i
             )
         )
         messages.insert(0, context_msg)
+
+    compressed_context = state.get("compressed_context", "")
+    if compressed_context:
+        messages.insert(0, SystemMessage(
+            content=f"对话摘要（历史上下文）：{compressed_context}"
+        ))
 
     full_response = ""
     async for chunk in chat_llm.astream(messages):
