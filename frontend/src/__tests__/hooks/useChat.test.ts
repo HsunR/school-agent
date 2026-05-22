@@ -398,10 +398,10 @@ describe("useChat", () => {
         await result.current.sendMessage(`msg${i}`);
       });
     }
-    // Verify last request only has 3 turns = 6 messages
+    // Verify last request only has 3 turns = 6 history + 1 current = 7
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = calls[calls.length - 1];
     const body = JSON.parse(lastCall[1].body);
-    expect(body.messages.length).toBe(6);
+    expect(body.messages.length).toBe(7);
   });
 });

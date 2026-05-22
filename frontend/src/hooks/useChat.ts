@@ -52,7 +52,7 @@ export function useChat() {
     try {
       const historyMessages = messagesRef.current
         .filter((m) => m.role === "user" || m.role === "assistant")
-        .slice(-5);
+        .slice(-6);
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
