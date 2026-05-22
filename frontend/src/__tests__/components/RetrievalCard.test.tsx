@@ -16,14 +16,14 @@ describe("RetrievalCard", () => {
     expect(screen.getByText("score: 85")).toBeInTheDocument();
   });
 
-  it("opens a modal with compressed content when clicking 详情", () => {
+  it("opens a modal with original content when clicking 详情", () => {
     const chunks = [
-      { preview: "宿舍管理费每学期500元", source: "学校贴吧", score: 85, compressed: "宿舍管理费500元" },
+      { preview: "宿舍管理费每学期500元", source: "学校贴吧", score: 85 },
     ];
     render(<RetrievalCard chunks={chunks} />);
     const detailButton = screen.getByText("详情");
     fireEvent.click(detailButton);
-    expect(screen.getByText("宿舍管理费500元")).toBeInTheDocument();
+    expect(screen.getByText("宿舍管理费每学期500元")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 

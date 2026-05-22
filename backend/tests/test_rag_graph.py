@@ -170,7 +170,7 @@ def test_should_retrieve_answer_node_when_no_search():
 def test_scoring_node_emits_scoring_events(mock_writer):
     scoring_llm = MagicMock()
     scoring_llm.invoke.return_value = AIMessage(
-        content='{"score": 85, "compressed": "保留的关键内容"}'
+        content='{"score": 85}'
     )
     state: ChatState = {
         "messages": [HumanMessage(content="宿舍管理费多少")],
@@ -186,7 +186,6 @@ def test_scoring_node_emits_scoring_events(mock_writer):
     assert "scored_chunks" in result
     assert len(result["scored_chunks"]) == 1
     assert result["scored_chunks"][0]["score"] == 85
-    assert result["scored_chunks"][0]["compressed"] == "保留的关键内容"
     assert result["scored_chunks"][0]["source"] == "学生手册"
 
 
@@ -224,7 +223,6 @@ def test_scoring_node_fallback_on_llm_error(mock_writer):
     result = scoring_node(state, scoring_llm)
     assert len(result["scored_chunks"]) == 1
     assert result["scored_chunks"][0]["score"] == 0
-    assert result["scored_chunks"][0]["compressed"] == ""
 
 
 @patch("app.graph.graph.get_stream_writer")
@@ -253,7 +251,7 @@ async def test_answer_node_falls_back_to_raw_chunks_when_all_scores_zero(mock_wr
         "manual_chunks": ["宿舍管理费每学期500元"],
         "forum_chunks": [],
         "scored_chunks": [
-            {"original": "宿舍管理费每学期500元", "source": "学生手册", "score": 0, "compressed": ""},
+            {"original": "宿舍管理费每学期500元", "source": "学生手册", "score": 0},
         ],
     }
     result = await answer_node(state, chat_llm)
@@ -285,20 +283,20 @@ async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
         "manual_chunks": [],
         "forum_chunks": ["帖A", "帖B", "帖C", "帖D"],
         "scored_chunks": [
-            {"original": "帖A", "source": "学校贴吧", "score": 90, "compressed": "帖A内容"},
-            {"original": "帖B", "source": "学校贴吧", "score": 20, "compressed": "帖B内容"},
-            {"original": "帖C", "source": "学校贴吧", "score": 80, "compressed": "帖C内容"},
-            {"original": "帖D", "source": "学校贴吧", "score": 60, "compressed": "帖D内容"},
+            {"original": "帖A", "source": "学校贴吧", "score": 90},
+            {"original": "帖B", "source": "学校贴吧", "score": 20},
+            {"original": "帖C", "source": "学校贴吧", "score": 80},
+            {"original": "帖D", "source": "学校贴吧", "score": 60},
         ],
     }
     result = await answer_node(state, chat_llm, top_k_scored=2)
     assert "messages" in result
     context = captured_context[0] if captured_context else ""
     # top 2 by score: 帖A(90) and 帖C(80)
-    assert "帖A内容" in context
-    assert "帖C内容" in context
-    assert "帖B内容" not in context
-    assert "帖D内容" not in context
+    assert "帖A" in context
+    assert "帖C" in context
+    assert "帖B" not in context
+    assert "帖D" not in context
 
 
 @patch("app.graph.graph.get_stream_writer")
@@ -431,7 +429,7 @@ async def test_answer_node_injects_compressed_context():
         "search_query_forum": "",
         "manual_chunks": ["宿舍管理费500元"],
         "forum_chunks": [],
-        "scored_chunks": [{"original": "宿舍管理费500元", "source": "学生手册", "score": 85, "compressed": "500元"}],
+        "scored_chunks": [{"original": "宿舍管理费500元", "source": "学生手册", "score": 85}],
         "optimized_query": "优化问题",
         "compressed_context": "用户询问关于宿舍管理费的问题",
     }
