@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     llm_scoring_base_url: str = "https://api.deepseek.com/v1"
     llm_scoring_api_key: str = ""
 
+    # ── Intent Node ──
+    llm_intent_model: str = "deepseek-chat"
+    llm_intent_base_url: str = "https://api.deepseek.com/v1"
+    llm_intent_api_key: str = ""
+
     # ── Generic LLM (backward compat for existing ChatService) ──
     llm_model: str = "deepseek-chat"
     llm_base_url: str = "https://api.deepseek.com/v1"

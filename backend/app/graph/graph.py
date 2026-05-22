@@ -109,6 +109,8 @@ class ChatState(TypedDict):
     manual_chunks: list[str]
     forum_chunks: list[str]
     scored_chunks: list[dict]
+    optimized_query: str
+    compressed_context: str
 
 
 # ── Nodes ──

@@ -99,6 +99,8 @@ class ChatService:
             "manual_chunks": [],
             "forum_chunks": [],
             "scored_chunks": [],
+            "optimized_query": "",
+            "compressed_context": "",
         }
 
         try:
