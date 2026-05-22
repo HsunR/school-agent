@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # ── Prompt templates (developer config, not exposed to .env) ──
 
 ROUTING_SYSTEM_PROMPT = (
+    "当前系统是「广师小助手」，所属广东技术师范大学，你是系统的路由节点。\n"
     "核心任务：判断用户问题是否需要从校园知识库中检索相关信息。\n"
     "知识库包含两种类型：\n"
     "1. student_manual —— 《广东技术师范大学学生手册》，内容涵盖学籍、学位、奖惩、资助、住宿、安全、收费等正式规章制度。\n"
@@ -93,6 +94,7 @@ ROUTING_SYSTEM_PROMPT = (
 )
 
 RETRIEVAL_CONTEXT_TEMPLATE = (
+    "当前系统是「广师小助手」，所属广东技术师范大学，你是系统的检索节点，。\n"
     "以下是从校园知识库中检索到的相关信息，请结合这些信息回答用户问题。\n"
     "如果检索到的内容与问题无关，请忽略它们。\n\n"
     "-----以下是从校园知识库中检索到的相关信息-----"
@@ -104,6 +106,7 @@ RETRIEVAL_CONTEXT_TEMPLATE = (
 )
 
 SCORING_SYSTEM_PROMPT = (
+    "当前系统是「广师小助手」，所属广东技术师范大学，你是系统的评分节点，。\n"
     "你是一个校园助手的内容过滤器。你的任务是判断给定的资料文本是否与用户问题相关。\n\n"
     "【评分标准】\n"
     "100分：资料完全回答了用户问题，包含所有必要信息。\ "  # 注意转义
@@ -111,39 +114,44 @@ SCORING_SYSTEM_PROMPT = (
     "50-74分：资料部分相关，只能间接或局部回答用户问题。\n"
     "1-49分：资料仅提及相关术语但实际不解决问题，或相关性很弱。\n"
     "0分：资料与用户问题完全无关，或资料为空。\n\n"
-    "【判断原则】\n"
-    "- 关注核心意图，而不是关键词是否完全匹配。\n"
-    "- 如果资料提到用户问题的直接答案，给高分。\n"
-    "- 如果资料只涉及背景或无关信息，给低分或0分。\n"
-    "- 资料为空时直接给0分。\n\n"
     "【输出格式】\n"
     "只输出合法的 JSON 对象，不要有任何额外解释。格式如下：\n"
     '{"score": 整数}'
-    "\n\n"
-    "【示例】\n"
-    "用户问题：\"白云校区的宿舍是几人间？\"\n"
-    "资料：\"白云校区宿舍有四人间和六人间，上床下桌。\"\n"
-    '输出：{"score": 100}'
-    "\n"
-    "用户问题：\"图书馆开放时间\"\n"
-    "资料：\"学生手册规定要爱护图书，不得逾期。\"\n"
-    '输出：{"score": 0}'
-    "\n"
-    "用户问题：\"学校改名情况\"\n"
-    "资料：\"贴吧里有人说以前叫广东民族学院，后来改广技师。\"\n"
-    '输出：{"score": 85}'
-    "\n"
-    "请根据上述规则，基于提供的资料和用户问题进行判断。"
 )
 
 INTENT_SYSTEM_PROMPT = (
+    "当前系统是「广师小助手」，所属广东技术师范大学，你是系统的意图分析节点，。\n"
     "你是一个校园助手的意图分析器。你的任务：\n"
-    "1. **优化用户问题** — 修复错误，补充缺失上下文，提取核心查询意图。输出 clear, self-contained question.\n"
-    "2. **压缩对话历史记录** — 提取最近对话中的关键事实、用户目标和已给答案。输出 clear, self-contained question.\n\n"
+    "1. **优化用户问题** — 将用户当前问题改写成一个清晰、自包含、可直接用于检索的问题。\n"
+    "   具体做法：\n"
+    "   - 修复错别字、语法错误和不通顺的表达。\n"
+    "   - 将指代不明的词（如“那个”“它”“那里”）替换为明确的实体。\n"
+    "   - 如果问题缺少主语或关键信息，根据对话历史补充完整。\n"
+    "   - 去除口头禅、语气词（如“嗯”“那个”“请问一下”），保留核心信息。\n"
+    "   - 不要私自推理联想用户的情况（如迟到旷课会怎么样改为如果学生因故迟到或旷课，通常会有什么后果？ 没有提到因故这件事），只根据用户问题和对话历史。\n"
+    "2. **压缩对话历史记录** — 从最近的对话中提取对回答当前问题有帮助的关键信息，输出一个简短的上下文摘要。\n"
+    "   具体做法：\n"
+    "   - 提取用户已经明确说过的事实。\n"
+    "   - 提取用户已经表达过的目标或需求。\n"
+    "   - 提取助手已经给出过的关键答案或信息。\n"
+    "   - 忽略纯粹的问候、感谢、无关闲聊。\n"
     "输出必须是以下 JSON 格式，不要添加任何额外内容：\n"
-    '{"optimized_query": "...", "compressed_context": "..."}'
+    '{{"optimized_query": "...", "compressed_context": "..."}}'
 )
 
+
+# ── Answer node ──
+
+ANSWER_SYSTEM_PROMPT = (
+    "你是「广师小助手」，广东技术师范大学的温暖热心的校园助手。\n"
+    "你以温暖、耐心、细致的方式回答同学们关于校园生活的各种问题。\n"
+    "你熟悉广东技术师范大学的校园环境、规章制度、学习生活、校园文化等各方面信息。\n\n"
+    "【核心原则】\n"
+    "- 使用亲切、温暖的口吻，像热心的学长学姐一样回答问题\n"
+    "- 回答要详细、具体、有用，结合检索到的校园知识库信息\n"
+    "- 如果不确定的信息，要诚实说明，不要编造\n"
+    "- 尊重每一位同学，营造包容、友善的校园氛围\n"
+)
 # ── Constants ──
 
 SOURCE_MANUAL_LABEL = "学生手册"
@@ -180,6 +188,67 @@ class ChatState(TypedDict):
 
 # ── Nodes ──
 
+def _extract_json(text: str) -> str:
+    best = text.strip()
+    # 1. Try ```json ... ``` block first
+    if "```json" in best:
+        start = best.find("```json") + 7
+        end = best.find("```", start)
+        if end != -1:
+            return best[start:end].strip()
+    # 2. Try extracting the first { ... } object
+    brace_start = best.find("{")
+    brace_end = best.rfind("}")
+    if brace_start != -1 and brace_end > brace_start:
+        return best[brace_start:brace_end + 1].strip()
+    # 3. Fallback to raw text
+    return best
+
+
+RETRY_HINT_TEMPLATE = (
+    "注意：上次输出格式错误。\n"
+    "请只输出合法的 JSON 对象，格式如下：\n"
+    "{expected_format}\n"
+    "不要包含任何其他解释或文本。"
+)
+
+
+def _parse_json_llm_response(
+    llm: BaseChatModel,
+    messages: list[BaseMessage],
+    expected_format: str,
+) -> dict | None:
+    """Invoke LLM, parse JSON response, retry once on parse failure.
+
+    Returns the parsed dict on success, or None if both attempts fail
+    (or LLM invocation itself fails).
+    """
+    for attempt in range(2):
+        try:
+            response: AIMessage = llm.invoke(messages)
+            text = _extract_json(response.content)
+            return json.loads(text)
+        except (json.JSONDecodeError, ValueError, TypeError):
+            if attempt == 0:
+                logger.warning(
+                    "JSON parse failed (attempt 1/2), retrying with hint. "
+                    "Expected format: %s", expected_format,
+                )
+                messages = [
+                    *messages,
+                    HumanMessage(
+                        content=RETRY_HINT_TEMPLATE.format(expected_format=expected_format)
+                    ),
+                ]
+            else:
+                logger.error("JSON parse failed after retry, falling back to defaults")
+                return None
+        except Exception:
+            logger.exception("LLM invocation failed, falling back to defaults")
+            return None
+    return None
+
+
 def _format_history(messages: Sequence[BaseMessage]) -> str:
     parts = []
     for m in messages:
@@ -194,18 +263,18 @@ def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
     last_msg = state["messages"][-1].content if state["messages"] else ""
     history_msgs = list(state["messages"][:-1])
     formatted_history = _format_history(history_msgs)
+    user_text = (
+        f"对话历史记录：\n{formatted_history}\n\n"
+        f"用户问题： {last_msg}"
+    )
     optimized_query = last_msg
     compressed_context = ""
     try:
         response: AIMessage = intent_llm.invoke([
             SystemMessage(content=INTENT_SYSTEM_PROMPT),
-            HumanMessage(content=(
-                f"对话历史记录：\n{formatted_history}\n\n"
-                f"用户问题：{last_msg}"
-            )),
+            HumanMessage(content=user_text),
         ])
-        text = response.content.strip()
-        text = text.removeprefix("```json").removesuffix("```").strip()
+        text = _extract_json(response.content)
         parsed = json.loads(text)
         optimized_query = str(parsed.get("optimized_query", last_msg))
         compressed_context = str(parsed.get("compressed_context", ""))
@@ -230,8 +299,7 @@ def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
         HumanMessage(content=last_msg),
     ])
     try:
-        text = response.content.strip()
-        text = text.removeprefix("```json").removesuffix("```").strip()
+        text = _extract_json(response.content)
         parsed = json.loads(text)
         search_manual = bool(parsed.get("search_manual", False))
         search_forum = bool(parsed.get("search_forum", False))
@@ -347,8 +415,7 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
                     f"文本内容：{safe_chunk}"
                 )),
             ])
-            text = response.content.strip()
-            text = text.removeprefix("```json").removesuffix("```").strip()
+            text = _extract_json(response.content)
             parsed = json.loads(text)
             score = max(0, min(100, int(parsed.get("score", 0))))
             logger.info("Scored %s chunk %d: score=%d",
@@ -373,10 +440,10 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
     return {"scored_chunks": scored_chunks}
 
 
-# ── Answer node ──
+
 
 async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: int = 3) -> dict:
-    """Generate the final answer using retrieved context, streaming tokens."""
+    """Generate the final answer using optimized query, compressed context, and retrieved context."""
     writer = get_stream_writer()
     scored = state.get("scored_chunks", [])
     manual_chunks = state.get("manual_chunks", [])
@@ -400,23 +467,31 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: i
         manual_context = "\n\n".join(manual_chunks) if manual_chunks else "（未检索到相关内容）"
         forum_context = "\n\n".join(forum_chunks) if forum_chunks else "（未检索到相关内容）"
 
-    has_context = bool(manual_chunks or forum_chunks)
-    messages = list(state["messages"])
-
-    if has_context:
-        context_msg = SystemMessage(
+    context_parts = []
+    if manual_chunks or forum_chunks:
+        context_parts.append(
             RETRIEVAL_CONTEXT_TEMPLATE.format(
                 manual_context=manual_context.replace("{", "{{").replace("}", "}}"),
                 forum_context=forum_context.replace("{", "{{").replace("}", "}}"),
             )
         )
-        messages.insert(0, context_msg)
+    compressed = state.get("compressed_context", "")
+    if compressed:
+        context_parts.append(f"对话摘要（历史上下文）：{compressed}")
 
-    compressed_context = state.get("compressed_context", "")
-    if compressed_context:
-        messages.insert(0, SystemMessage(
-            content=f"对话摘要（历史上下文）：{compressed_context}"
-        ))
+    optimized = state.get("optimized_query", "")
+    last_raw = state["messages"][-1].content if state["messages"] else ""
+    user_question = optimized.strip() or last_raw
+
+    if context_parts:
+        user_content = "\n\n".join(context_parts) + "\n\n" + user_question
+    else:
+        user_content = user_question
+
+    messages = [
+        SystemMessage(content=ANSWER_SYSTEM_PROMPT),
+        HumanMessage(content=user_content),
+    ]
 
     full_response = ""
     async for chunk in chat_llm.astream(messages):
