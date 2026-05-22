@@ -350,3 +350,58 @@ def test_intent_node_fallback_on_bad_json(mock_writer):
     result = intent_node(chat_state, mock_llm)
     assert result["optimized_query"] == "原始问题"
     assert result["compressed_context"] == ""
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_routing_node_uses_optimized_query(mock_writer):
+    """Verify routing node uses optimized_query when available."""
+    from app.graph.graph import routing_node
+
+    chat_state = {
+        "messages": [HumanMessage(content="原始问题很多错别字")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": [],
+        "forum_chunks": [],
+        "scored_chunks": [],
+        "optimized_query": "优化后的问题",
+        "compressed_context": "对话摘要",
+    }
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content=json.dumps({
+        "search_manual": True, "search_forum": False,
+        "search_query_manual": "查询关键词", "search_query_forum": "",
+    }))
+    routing_node(chat_state, mock_llm)
+    call_text = str(mock_llm.invoke.call_args)
+    assert "优化后的问题" in call_text
+    assert "原始问题很多错别字" not in call_text
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_scoring_node_uses_optimized_query(mock_writer):
+    """Verify scoring node uses optimized_query when available."""
+    from app.graph.graph import scoring_node
+
+    chat_state = {
+        "messages": [HumanMessage(content="原始问题")],
+        "search_manual": False,
+        "search_forum": False,
+        "search_query_manual": "",
+        "search_query_forum": "",
+        "manual_chunks": ["宿舍管理费每学期500元"],
+        "forum_chunks": [],
+        "scored_chunks": [],
+        "optimized_query": "优化后的问题",
+        "compressed_context": "对话摘要",
+    }
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content=json.dumps({
+        "score": 85, "compressed": "500元",
+    }))
+    scoring_node(chat_state, mock_llm)
+    call_text = str(mock_llm.invoke.call_args)
+    assert "优化后的问题" in call_text
+    assert "原始问题" not in call_text

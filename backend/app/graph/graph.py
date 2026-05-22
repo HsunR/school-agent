@@ -170,10 +170,10 @@ def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
 def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
     """Classify whether the user question needs each knowledge source."""
     writer = get_stream_writer()
-    last_msg = state["messages"][-1].content if state["messages"] else ""
+    last_msg = state.get("optimized_query") or (state["messages"][-1].content if state["messages"] else "")
     response: AIMessage = llm.invoke([
         SystemMessage(content=ROUTING_SYSTEM_PROMPT),
-        *state["messages"],
+        HumanMessage(content=last_msg),
     ])
     try:
         text = response.content.strip()
@@ -269,7 +269,7 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         writer({"type": "scoring", "source": "done", "done": True})
         return {"scored_chunks": []}
 
-    user_question = state["messages"][-1].content if state["messages"] else ""
+    user_question = state.get("optimized_query") or (state["messages"][-1].content if state["messages"] else "")
     scored_chunks: list[dict] = []
     source_counters: dict[str, int] = {}
 
@@ -352,6 +352,12 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: i
 
     has_context = bool(manual_chunks or forum_chunks)
     messages = list(state["messages"])
+
+    compressed_context = state.get("compressed_context", "")
+    if compressed_context:
+        messages.insert(0, SystemMessage(
+            content=f"对话摘要（历史上下文）：{compressed_context}"
+        ))
 
     if has_context:
         context_msg = SystemMessage(
