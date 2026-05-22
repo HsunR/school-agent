@@ -109,4 +109,17 @@ describe("ChatMessage", () => {
     expect(screen.getByTestId("chat-message")).toBeInTheDocument();
     expect(screen.getByText("AI")).toBeInTheDocument();
   });
+
+  it("renders intent card with optimized query", () => {
+    const msg: ChatMessageType = {
+      id: "intent-1",
+      role: "intent",
+      content: "正在理解你的问题...",
+      timestamp: Date.now(),
+      optimizedQuery: "旷课处罚规定",
+    };
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText("意图分析")).toBeInTheDocument();
+    expect(screen.getByText("优化后查询: 旷课处罚规定")).toBeInTheDocument();
+  });
 });

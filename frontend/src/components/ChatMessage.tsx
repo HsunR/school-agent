@@ -37,6 +37,25 @@ export default function ChatMessage({ message }: ChatMessageProps) {
     );
   }
 
+  if (message.role === "intent") {
+    return (
+      <div data-testid="chat-message" className="mb-4 flex justify-start">
+        <div className="max-w-[80%] rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3">
+          <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-purple-400">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-purple-400" />
+            意图分析
+          </div>
+          <div className="text-sm text-gray-600">{message.content}</div>
+          {message.optimizedQuery && (
+            <div className="mt-1 text-xs text-purple-600">
+              优化后查询: {message.optimizedQuery}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (message.role === "retrieval") {
     return (
       <div data-testid="chat-message" className="mb-4 flex justify-start">
