@@ -50,9 +50,9 @@ export function useChat() {
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
 
     try {
-      const historyMessages = messagesRef.current.filter(
-        (m) => m.role === "user" || m.role === "assistant",
-      );
+      const historyMessages = messagesRef.current
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-5);
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,6 +95,22 @@ export function useChat() {
               setMessages((prev) => {
                 const updated = [...prev];
                 updated.splice(updated.length - 1, 0, statusMsg);
+                return updated;
+              });
+              continue;
+            }
+
+            if (payload.type === "intent") {
+              const intentMsg: ChatMessage = {
+                id: `intent-${generateId()}`,
+                role: "intent",
+                content: payload.label || "正在理解你的问题...",
+                timestamp: Date.now(),
+                optimizedQuery: payload.optimized_query,
+              };
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated.splice(updated.length - 1, 0, intentMsg);
                 return updated;
               });
               continue;

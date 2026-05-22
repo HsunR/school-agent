@@ -299,6 +299,45 @@ describe("useChat", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it("should handle scoring events from multiple sources", async () => {
+    const stream = createSSEStream(
+      'data: {"type":"retrieval","source":"student_manual","label":"已检索到【学生手册】相关规定","chunks":[{"preview":"旷课处罚规定","source":"学生手册"},{"preview":"考试作弊处理","source":"学生手册"}]}\n\n',
+      'data: {"type":"retrieval","source":"school_forum","label":"已检索到【学校贴吧】相关讨论","chunks":[{"preview":"宿舍管理费每学期500元","source":"学校贴吧"},{"preview":"食堂推荐窗口","source":"学校贴吧"}]}\n\n',
+      'data: {"type":"scoring","source":"student_manual","index":0,"score":90,"compressed":"旷课处罚规定原文"}\n\n',
+      'data: {"type":"scoring","source":"student_manual","index":1,"score":20,"compressed":"作弊"}\n\n',
+      'data: {"type":"scoring","source":"school_forum","index":0,"score":85,"compressed":"宿舍管理费500元"}\n\n',
+      'data: {"type":"scoring","source":"school_forum","index":1,"score":30,"compressed":"食堂"}\n\n',
+      'data: {"type":"scoring","source":"done","done":true}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
+    );
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      body: stream,
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage("旷课宿舍费");
+    });
+
+    const msgs = result.current.messages;
+    const manualMsg = msgs.find((m) => m.role === "retrieval" && m.chunks?.[0]?.source === "学生手册");
+    const forumMsg = msgs.find((m) => m.role === "retrieval" && m.chunks?.[0]?.source === "学校贴吧");
+    expect(manualMsg).toBeDefined();
+    expect(forumMsg).toBeDefined();
+    // manual chunks
+    expect(manualMsg!.chunks![0].score).toBe(90);
+    expect(manualMsg!.chunks![0].compressed).toBe("旷课处罚规定原文");
+    expect(manualMsg!.chunks![1].score).toBe(20);
+    expect(manualMsg!.chunks![1].compressed).toBe("作弊");
+    // forum chunks
+    expect(forumMsg!.chunks![0].score).toBe(85);
+    expect(forumMsg!.chunks![0].compressed).toBe("宿舍管理费500元");
+    expect(forumMsg!.chunks![1].score).toBe(30);
+    expect(forumMsg!.chunks![1].compressed).toBe("食堂");
+  });
+
   it("should handle scoring events and update chunk scores", async () => {
     const stream = createSSEStream(
       'data: {"type":"retrieval","source":"school_forum","label":"已检索到【学校贴吧】相关讨论","chunks":[{"preview":"宿舍管理费每学期500元","source":"学校贴吧"},{"preview":"食堂推荐窗口","source":"学校贴吧"}]}\n\n',
@@ -325,5 +364,44 @@ describe("useChat", () => {
     expect(retrievalMsg!.chunks![0].compressed).toBe("宿舍管理费500元");
     expect(retrievalMsg!.chunks![1].score).toBe(30);
     expect(retrievalMsg!.chunks![1].compressed).toBe("食堂");
+  });
+
+  it("should handle intent event and display optimized query", async () => {
+    const stream = createSSEStream(
+      'data: {"type":"intent","optimized_query":"优化后的问题","compressed_context":"上下文摘要","label":"正在理解你的问题..."}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
+    );
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true, body: stream,
+    });
+    const { result } = renderHook(() => useChat());
+    await act(async () => {
+      await result.current.sendMessage("原始问题");
+    });
+    const intentMsg = result.current.messages.find((m) => m.role === "intent");
+    expect(intentMsg).toBeDefined();
+    expect(intentMsg!.optimizedQuery).toBe("优化后的问题");
+  });
+
+  it("should only send last 3 turns of history", async () => {
+    const stream = createSSEStream('data: {"type":"token","token":"","done":true}\n\n');
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true, body: stream,
+    });
+    const { result } = renderHook(() => useChat());
+    // Send 4 messages to build 4 turns of history
+    for (let i = 0; i < 4; i++) {
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true, body: stream,
+      });
+      await act(async () => {
+        await result.current.sendMessage(`msg${i}`);
+      });
+    }
+    // Verify last request only has 3 turns = 6 messages
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    const body = JSON.parse(lastCall[1].body);
+    expect(body.messages.length).toBe(6);
   });
 });

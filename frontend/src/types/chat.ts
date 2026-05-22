@@ -1,4 +1,4 @@
-export type MessageRole = "user" | "assistant" | "system" | "status" | "retrieval" | "scoring" | "error";
+export type MessageRole = "user" | "assistant" | "system" | "status" | "retrieval" | "scoring" | "intent" | "error";
 
 export interface ChatMessage {
   id: string;
@@ -9,6 +9,7 @@ export interface ChatMessage {
   node?: string;
   decision?: { search_manual: boolean; search_forum: boolean };
   chunks?: RetrievalPreview[];
+  optimizedQuery?: string;
 }
 
 export interface RetrievalPreview {
@@ -19,7 +20,7 @@ export interface RetrievalPreview {
 }
 
 export interface SSEPayload {
-  type: "status" | "retrieval" | "scoring" | "token" | "error";
+  type: "status" | "retrieval" | "scoring" | "token" | "intent" | "error";
   token?: string;
   done?: boolean;
   error?: string;
@@ -31,4 +32,6 @@ export interface SSEPayload {
   index?: number;
   score?: number;
   compressed?: string;
+  optimized_query?: string;
+  compressed_context?: string;
 }
