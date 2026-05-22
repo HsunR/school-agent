@@ -406,26 +406,28 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         source_counters[source_key] = idx + 1
 
         score = 0
-        try:
-            safe_question = user_question[:MAX_QUESTION_CHARS]
-            safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS]
-            logger.debug("Scoring prompt for %s chunk %d: user_question=%.50s..., chunk=%.50s...",
-                         source_key, idx, user_question, chunk_text)
-            response: AIMessage = scoring_llm.invoke([
+        safe_question = user_question[:MAX_QUESTION_CHARS]
+        safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS]
+        logger.debug("Scoring prompt for %s chunk %d: user_question=%.50s..., chunk=%.50s...",
+                     source_key, idx, user_question, chunk_text)
+        parsed = _parse_json_llm_response(
+            scoring_llm,
+            [
                 SystemMessage(content=SCORING_SYSTEM_PROMPT),
                 HumanMessage(content=(
                     f"资料文本：{source}\n"
                     f"用户问题：{safe_question}\n"
                     f"文本内容：{safe_chunk}"
                 )),
-            ])
-            text = _extract_json(response.content)
-            parsed = json.loads(text)
+            ],
+            expected_format='{"score": 整数}',
+        )
+        if parsed:
             score = max(0, min(100, int(parsed.get("score", 0))))
             logger.info("Scored %s chunk %d: score=%d",
                         source_key, idx, score)
-        except Exception:
-            logger.exception("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
+        else:
+            logger.warning("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
             score = 0
 
         scored_chunks.append({

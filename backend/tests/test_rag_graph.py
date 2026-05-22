@@ -236,7 +236,9 @@ def test_scoring_node_handles_empty_chunks(mock_writer):
 @patch("app.graph.graph.get_stream_writer")
 def test_scoring_node_fallback_on_llm_error(mock_writer):
     scoring_llm = MagicMock()
-    scoring_llm.invoke.side_effect = Exception("API error")
+    scoring_llm.invoke.side_effect = [
+        Exception("API error"),
+    ]
     state: ChatState = {
         "messages": [HumanMessage(content="宿舍")],
         "search_manual": True,
@@ -250,6 +252,52 @@ def test_scoring_node_fallback_on_llm_error(mock_writer):
     result = scoring_node(state, scoring_llm)
     assert len(result["scored_chunks"]) == 1
     assert result["scored_chunks"][0]["score"] == 0
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_scoring_node_retry_succeeds(mock_writer):
+    scoring_llm = MagicMock()
+    scoring_llm.invoke.side_effect = [
+        AIMessage(content="not json"),
+        AIMessage(content='{"score": 85}'),
+    ]
+    state: ChatState = {
+        "messages": [HumanMessage(content="宿舍管理费多少")],
+        "search_manual": True,
+        "search_forum": False,
+        "search_query_manual": "宿舍",
+        "search_query_forum": "",
+        "manual_chunks": ["宿舍管理费每学期500元"],
+        "forum_chunks": [],
+        "scored_chunks": [],
+    }
+    result = scoring_node(state, scoring_llm)
+    assert len(result["scored_chunks"]) == 1
+    assert result["scored_chunks"][0]["score"] == 85
+    assert scoring_llm.invoke.call_count == 2
+
+
+@patch("app.graph.graph.get_stream_writer")
+def test_scoring_node_retry_both_fail(mock_writer):
+    scoring_llm = MagicMock()
+    scoring_llm.invoke.side_effect = [
+        AIMessage(content="not json"),
+        AIMessage(content="still bad"),
+    ]
+    state: ChatState = {
+        "messages": [HumanMessage(content="宿舍")],
+        "search_manual": True,
+        "search_forum": False,
+        "search_query_manual": "宿舍",
+        "search_query_forum": "",
+        "manual_chunks": ["内容1"],
+        "forum_chunks": [],
+        "scored_chunks": [],
+    }
+    result = scoring_node(state, scoring_llm)
+    assert len(result["scored_chunks"]) == 1
+    assert result["scored_chunks"][0]["score"] == 0
+    assert scoring_llm.invoke.call_count == 2
 
 
 @patch("app.graph.graph.get_stream_writer")
