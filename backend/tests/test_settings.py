@@ -47,6 +47,10 @@ class TestSettingsDefaults:
         settings = Settings()
         assert settings.llm_scoring_api_key == ""
 
+    def test_default_rag_top_k_scored(self):
+        settings = Settings()
+        assert settings.rag_top_k_scored == 3
+
 
 class TestSettingsEnvOverrides:
     """Settings should read overrides from environment variables."""

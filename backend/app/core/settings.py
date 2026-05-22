@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./chroma_db"
     rag_top_k_manual: int = 5  # student_manual
     rag_top_k_forum: int = 5   # school_forum
+    rag_top_k_scored: int = 3  # top-N scored chunks used in answer
 
     # ── Other ──
     max_input_length: int = 1000

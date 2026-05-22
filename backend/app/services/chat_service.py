@@ -71,6 +71,7 @@ class ChatService:
 
         self.graph = compile_graph(
             self.routing_llm, self.chroma, self.chat_llm, self.scoring_llm,
+            top_k_scored=settings.rag_top_k_scored,
         )
 
     def _to_langchain(self, messages: list[ChatMessage]) -> list[BaseMessage]:
@@ -98,8 +99,6 @@ class ChatService:
             "manual_chunks": [],
             "forum_chunks": [],
             "scored_chunks": [],
-            "rag_top_k_manual": self.settings.rag_top_k_manual,
-            "rag_top_k_forum": self.settings.rag_top_k_forum,
         }
 
         try:

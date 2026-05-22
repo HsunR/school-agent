@@ -41,6 +41,7 @@ def settings() -> Settings:
         chroma_persist_dir="./test_chroma_db",
         rag_top_k_manual=3,
         rag_top_k_forum=3,
+        rag_top_k_scored=3,
         max_input_length=1000,
         llm_timeout=30,
         app_name="Test App",

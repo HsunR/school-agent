@@ -261,46 +261,40 @@ async def test_answer_node_falls_back_to_raw_chunks_when_all_scores_zero(mock_wr
 
 @patch("app.graph.graph.get_stream_writer")
 @pytest.mark.asyncio
-async def test_answer_node_selects_top_k_by_score(mock_writer):
-    """answer_node should sort scored chunks by score and take top K per source."""
+async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
+    """answer_node should sort by score descending and take only top_k_scored."""
     from app.graph.graph import answer_node
 
     chat_llm = MagicMock()
-    captured_messages = []
+    captured_context: list[str] = []
 
     async def _mock_astream(messages):
-        nonlocal captured_messages
-        captured_messages = messages
-        yield AIMessageChunk(content="done")
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                captured_context.append(msg.content)
+        yield AIMessageChunk(content="Hello World!")
     chat_llm.astream = _mock_astream
 
     state = {
-        "messages": [HumanMessage(content="宿舍")],
-        "search_manual": True,
+        "messages": [HumanMessage(content="东校区宿舍")],
+        "search_manual": False,
         "search_forum": True,
-        "search_query_manual": "宿舍",
+        "search_query_manual": "",
         "search_query_forum": "宿舍",
-        "manual_chunks": ["m1", "m2", "m3"],
-        "forum_chunks": ["f1", "f2", "f3"],
+        "manual_chunks": [],
+        "forum_chunks": ["帖A", "帖B", "帖C", "帖D"],
         "scored_chunks": [
-            {"original": "m3", "source": "学生手册", "score": 95, "compressed": "m3c"},
-            {"original": "m1", "source": "学生手册", "score": 40, "compressed": "m1c"},
-            {"original": "m2", "source": "学生手册", "score": 80, "compressed": "m2c"},
-            {"original": "f2", "source": "学校贴吧", "score": 90, "compressed": "f2c"},
-            {"original": "f1", "source": "学校贴吧", "score": 30, "compressed": "f1c"},
+            {"original": "帖A", "source": "学校贴吧", "score": 90, "compressed": "帖A内容"},
+            {"original": "帖B", "source": "学校贴吧", "score": 20, "compressed": "帖B内容"},
+            {"original": "帖C", "source": "学校贴吧", "score": 80, "compressed": "帖C内容"},
+            {"original": "帖D", "source": "学校贴吧", "score": 60, "compressed": "帖D内容"},
         ],
-        "rag_top_k_manual": 2,
-        "rag_top_k_forum": 1,
     }
-
-    await answer_node(state, chat_llm)
-    context = next(
-        (m.content for m in captured_messages if isinstance(m, SystemMessage)), ""
-    )
-    # Manual: top 2 by score → m3 (95) + m2 (80)
-    assert "m3c" in context
-    assert "m2c" in context
-    assert "m1c" not in context  # score 40, below top 2
-    # Forum: top 1 by score → f2 (90)
-    assert "f2c" in context
-    assert "f1c" not in context  # score 30, below top 1
+    result = await answer_node(state, chat_llm, top_k_scored=2)
+    assert "messages" in result
+    context = captured_context[0] if captured_context else ""
+    # top 2 by score: 帖A(90) and 帖C(80)
+    assert "帖A内容" in context
+    assert "帖C内容" in context
+    assert "帖B内容" not in context
+    assert "帖D内容" not in context

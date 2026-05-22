@@ -70,13 +70,11 @@ RETRIEVAL_CONTEXT_TEMPLATE = (
 
 SCORING_SYSTEM_PROMPT = (
     "你是一个校园助手的内容过滤器。你的任务：\n"
-    "1. 给你一段文本和一个用户问题\n"
-    "2. 判断文本是否与用户问题相关，打分 0-100\n"
-    "3. 从文本中删除与用户问题完全无关的句子，保留所有与问题相关的原文\n"
+    "1. 给你一个资料的原文文本和一个用户问题\n"
+    "2. 判断资料文本是否与用户问题相关，打分 0-100\n"
+    "3. 从资料文本中删除与用户问题完全无关的帖子楼层或者条例，只做这种减法不做任何改动\n"
     "4. 只做删除操作，不得改写、总结、理解或重组原文内容\n"
-    "5. 保留原文中的所有日期、时间、数字等具体信息\n"
-    "6. 如果删除无关句子后没有剩下任何内容，压缩结果为空字符串\n"
-    "7. 如果整段文本与问题无关，打 0 分，压缩内容留空\n\n"
+    "5. 如果整段文本与问题无关，打 0 分，压缩内容留空\n\n"
     "输出必须是以下 JSON 格式，不要添加任何额外内容：\n"
     '{"score": 85, "compressed": "裁剪后保留的原文片段（逐字复制，不做任何改动）"}'
 )
@@ -111,8 +109,6 @@ class ChatState(TypedDict):
     manual_chunks: list[str]
     forum_chunks: list[str]
     scored_chunks: list[dict]
-    rag_top_k_manual: int
-    rag_top_k_forum: int
 
 
 # ── Nodes ──
@@ -238,10 +234,9 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
             response: AIMessage = scoring_llm.invoke([
                 SystemMessage(content=SCORING_SYSTEM_PROMPT),
                 HumanMessage(content=(
-                    f"文本来源：{source}\n"
+                    f"资料文本：{source}\n"
                     f"用户问题：{safe_question}\n"
-                    f"文本内容：{safe_chunk}\n\n"
-                    f"注意：{source}类型文本，删除无关楼层/无关评论内容即可，其余一律保留原文。"
+                    f"文本内容：{safe_chunk}"
                 )),
             ])
             text = response.content.strip()
@@ -276,29 +271,22 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
 
 # ── Answer node ──
 
-async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
+async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: int = 3) -> dict:
     """Generate the final answer using retrieved context, streaming tokens."""
     writer = get_stream_writer()
     scored = state.get("scored_chunks", [])
     manual_chunks = state.get("manual_chunks", [])
     forum_chunks = state.get("forum_chunks", [])
-    top_k_manual = state.get("rag_top_k_manual", 5)
-    top_k_forum = state.get("rag_top_k_forum", 5)
 
     if scored and any(c["score"] > 0 and c["compressed"] for c in scored):
-        manual_scored = sorted(
-            [c for c in scored if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]],
-            key=lambda c: c["score"], reverse=True,
-        )[:top_k_manual]
-        forum_scored = sorted(
-            [c for c in scored if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0 and c["compressed"]],
-            key=lambda c: c["score"], reverse=True,
-        )[:top_k_forum]
+        sorted_scored = sorted(scored, key=lambda c: c["score"], reverse=True)[:top_k_scored]
         manual_context = "\n\n".join(
-            c["compressed"][:MAX_COMPRESSED_CHARS] for c in manual_scored
+            c["compressed"][:MAX_COMPRESSED_CHARS] for c in sorted_scored
+            if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]
         )
         forum_context = "\n\n".join(
-            c["compressed"][:MAX_COMPRESSED_CHARS] for c in forum_scored
+            c["compressed"][:MAX_COMPRESSED_CHARS] for c in sorted_scored
+            if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0 and c["compressed"]
         )
         if not manual_context:
             manual_context = "（未检索到相关内容）"
@@ -347,6 +335,7 @@ def compile_graph(
     chroma: ChromaManager,
     chat_llm: BaseChatModel,
     scoring_llm: BaseChatModel,
+    top_k_scored: int = 3,
 ) -> StateGraph:
     """Build and compile the LangGraph state graph.
 
@@ -355,6 +344,7 @@ def compile_graph(
         chroma: The ChromaDB manager instance.
         chat_llm: The LLM instance for the answer node (streaming).
         scoring_llm: The LLM instance for the scoring node.
+        top_k_scored: Max scored chunks to include in final context.
 
     Returns:
         A compiled ``StateGraph``.
@@ -367,7 +357,7 @@ def compile_graph(
     builder.add_node("scoring_node", lambda state: scoring_node(state, scoring_llm))
 
     async def _answer_node(state):
-        return await answer_node(state, chat_llm)
+        return await answer_node(state, chat_llm, top_k_scored)
 
     builder.add_node("answer_node", _answer_node)
 
