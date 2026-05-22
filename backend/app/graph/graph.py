@@ -37,59 +37,111 @@ logger = logging.getLogger(__name__)
 # ── Prompt templates (developer config, not exposed to .env) ──
 
 ROUTING_SYSTEM_PROMPT = (
-    "You are a routing classifier for a campus assistant. "
-    "Given a user's question, determine whether it requires knowledge from:\n"
-    "1. student_manual — the school's student handbook (rules, policies, procedures)\n"
-    "2. school_forum — the school's forum/bbs (campus life, events, gossip)\n\n"
-    "For each knowledge source that is relevant, generate an optimized search query "
-    "for vector retrieval. Extract key terms and reformulate specifically for that source.\n\n"
-    "Respond with valid JSON only:\n"
+    "核心任务：判断用户问题是否需要从校园知识库中检索相关信息。\n"
+    "知识库包含两种类型：\n"
+    "1. student_manual —— 《广东技术师范大学学生手册》，内容涵盖学籍、学位、奖惩、资助、住宿、安全、收费等正式规章制度。\n"
+    "2. school_forum —— 学校贴吧帖子合集（2014-2026年），包含招生、宿舍、食堂、考研、就业、日常吐槽、校园文化等真实学生讨论。\n\n"
+
+    "【判断规则】\n"
+    "一、**不需要检索**的情况（search_manual=false, search_forum=false）：\n"
+    "   - 单纯问候：你好、嗨、在吗、上午好等\n"
+    "   - 简单感谢或告别：谢谢、拜拜、知道了等\n"
+    "   - 无意义或测试：测试、123、？、随便发的内容\n"
+    "   - 与广师大/校园生活完全无关的问题：今天天气、美国总统是谁、怎么做红烧肉等\n"
+    "   - 用户要求不检索或闲聊（明确说“聊聊天”等）\n\n"
+
+    "二、**需要检索**的情况：\n"
+    "   - 问题明确涉及广师大的制度、规定、政策 → 优先检索 student_manual\n"
+    "   - 问题涉及校园生活、学生真实体验（宿舍、食堂、老师、社团、求职经验、吐槽等）→ 检索 school_forum\n"
+    "   - 问题同时涉及规定和实际体验（如“旷课了还能去食堂吗”）→ 两者都检索\n"
+    "   - 问题使用学校别称（广技师、广师大、gjs、技校等）且内容与学校相关 → 需要检索\n\n"
+
+    "三、**查询生成优化**：\n"
+    "   - 提取用户问题中的核心关键词（如“旷课 处分 次数”、“白云校区 宿舍 几人间”）。\n"
+    "   - 去除口语化词汇和与检索无关的语气词。\n"
+    "   - 如果用户问题模糊，可适当补充常见相关词（例如问“转专业难吗”→补充“转专业 条件 流程”）。\n"
+    "   - 若不需要检索，对应查询字段留空字符串。\n\n"
+
+    "【输出格式】\n"
+    "只输出合法的 JSON 对象，不要输出任何其他解释或文本。\n"
     '{"search_manual": true/false, "search_forum": true/false,\n'
     ' "search_query_manual": "...", "search_query_forum": "..."}\n\n'
-    "Examples:\n"
-    '- "旷课会不会被处分"\n'
-    '  → {"search_manual": true, "search_forum": false,\n'
-    '     "search_query_manual": "旷课 处分 规定 节数",\n'
-    '     "search_query_forum": ""}\n'
-    '- "旷课了能去食堂吃饭吗"\n'
-    '  → {"search_manual": true, "search_forum": true,\n'
-    '     "search_query_manual": "旷课 处分 规定",\n'
-    '     "search_query_forum": "食堂 吃饭 推荐"}\n'
-    '- "今天天气怎么样"\n'
-    '  → {"search_manual": false, "search_forum": false,\n'
-    '     "search_query_manual": "", "search_query_forum": ""}'
+
+    "【典型示例】\n"
+    "- 用户：\"你好\"\n"
+    '  → {"search_manual": false, "search_forum": false, "search_query_manual": "", "search_query_forum": ""}\n'
+    "- 用户：\"谢谢你的帮助\"\n"
+    '  → {"search_manual": false, "search_forum": false, "search_query_manual": "", "search_query_forum": ""}\n'
+    "- 用户：\"旷课几次会被处分？\"\n"
+    '  → {"search_manual": true, "search_forum": false, "search_query_manual": "旷课 处分 次数 规定", "search_query_forum": ""}\n'
+    "- 用户：\"白云校区食堂有什么好吃的？\"\n"
+    '  → {"search_manual": false, "search_forum": true, "search_query_manual": "", "search_query_forum": "白云校区 食堂 推荐 好吃"}\n'
+    "- 用户：\"听说学校要改名？到底叫什么？\"\n"
+    '  → {"search_manual": false, "search_forum": true, "search_query_manual": "", "search_query_forum": "改名 广技师 广师大 简称 争议"}\n'
+    "- 用户：\"申请助学金的流程是什么？\"\n"
+    '  → {"search_manual": true, "search_forum": false, "search_query_manual": "助学金 申请 流程 条件", "search_query_forum": ""}\n'
+    "- 用户：\"计算机专业就业怎么样？\"\n"
+    '  → {"search_manual": false, "search_forum": true, "search_query_manual": "", "search_query_forum": "计算机 就业 薪资 实习"}\n'
+    "- 用户：\"旷课了还能去食堂吃饭吗？\"\n"
+    '  → {"search_manual": true, "search_forum": true, "search_query_manual": "旷课 处分 规定", "search_query_forum": "食堂 吃饭 经验"}\n'
+    "- 用户：\"今天广州天气怎么样？\"\n"
+    '  → {"search_manual": false, "search_forum": false, "search_query_manual": "", "search_query_forum": ""}\n'
+    "- 用户：\"河源校区宿舍是几人间？\"\n"
+    '  → {"search_manual": false, "search_forum": true, "search_query_manual": "", "search_query_forum": "河源校区 宿舍 几人间 环境"}\n\n'
+
+    "请严格按照上述规则和格式进行判断和输出。"
 )
 
 RETRIEVAL_CONTEXT_TEMPLATE = (
     "以下是从校园知识库中检索到的相关信息，请结合这些信息回答用户问题。\n"
     "如果检索到的内容与问题无关，请忽略它们。\n\n"
+    "-----以下是从校园知识库中检索到的相关信息-----"
     "【学生手册】\n{manual_context}\n\n"
     "【学校贴吧】\n{forum_context}\n\n"
+    "-----结束从校园知识库中检索到的相关信息------"
     "请用中文回答。"
+    "【important你的核心任务】：以上是系统从校园知识库中检索到的相关信息给你辅助回答用户问题的信息，不是用户给你的，请结合这些信息回答用户问题。"
 )
 
 SCORING_SYSTEM_PROMPT = (
-    "你是一个校园助手的内容过滤器。你的任务：\n"
-    "1. 给你一个资料的原文文本和一个用户问题\n"
-    "2. 判断资料文本是否与用户问题相关，打分 0-100\n"
-    "3. 从资料文本中删除与用户问题完全无关的帖子楼层或者条例，只做这种减法不做任何改动\n"
-    "4. 只做删除操作，不得改写、总结、理解或重组原文内容\n"
-    "5. 如果整段文本与问题无关，打 0 分，压缩内容留空\n\n"
-    "输出必须是以下 JSON 格式，不要添加任何额外内容：\n"
-    '{"score": 85, "compressed": "裁剪后保留的原文片段（逐字复制，不做任何改动）"}'
+    "你是一个校园助手的内容过滤器。你的任务是判断给定的资料文本是否与用户问题相关。\n\n"
+    "【评分标准】\n"
+    "100分：资料完全回答了用户问题，包含所有必要信息。\ "  # 注意转义
+    "75-99分：资料与问题高度相关，能回答大部分内容，但可能缺少部分细节。\n"
+    "50-74分：资料部分相关，只能间接或局部回答用户问题。\n"
+    "1-49分：资料仅提及相关术语但实际不解决问题，或相关性很弱。\n"
+    "0分：资料与用户问题完全无关，或资料为空。\n\n"
+    "【判断原则】\n"
+    "- 关注核心意图，而不是关键词是否完全匹配。\n"
+    "- 如果资料提到用户问题的直接答案，给高分。\n"
+    "- 如果资料只涉及背景或无关信息，给低分或0分。\n"
+    "- 资料为空时直接给0分。\n\n"
+    "【输出格式】\n"
+    "只输出合法的 JSON 对象，不要有任何额外解释。格式如下：\n"
+    '{"score": 整数}'
+    "\n\n"
+    "【示例】\n"
+    "用户问题：\"白云校区的宿舍是几人间？\"\n"
+    "资料：\"白云校区宿舍有四人间和六人间，上床下桌。\"\n"
+    '输出：{"score": 100}'
+    "\n"
+    "用户问题：\"图书馆开放时间\"\n"
+    "资料：\"学生手册规定要爱护图书，不得逾期。\"\n"
+    '输出：{"score": 0}'
+    "\n"
+    "用户问题：\"学校改名情况\"\n"
+    "资料：\"贴吧里有人说以前叫广东民族学院，后来改广技师。\"\n"
+    '输出：{"score": 85}'
+    "\n"
+    "请根据上述规则，基于提供的资料和用户问题进行判断。"
 )
 
 INTENT_SYSTEM_PROMPT = (
-    "You are an intent analyzer for a campus assistant. "
-    "Given the user's question and conversation history, perform two tasks:\n"
-    "1. **Optimize the user question** — Fix typos, fill in omitted context, "
-    "extract the core query intent. Output a clear, self-contained question.\n"
-    "2. **Compress the conversation history** — Summarize recent conversation "
-    "into a concise paragraph, preserving key facts, user goals, and any answers already given.\n\n"
-    "Output valid JSON only:\n"
-    '{{"optimized_query": "...", "compressed_context": "..."}}\n\n'
-    "Conversation history:\n{formatted_history}\n\n"
-    "User question: {last_message}"
+    "你是一个校园助手的意图分析器。你的任务：\n"
+    "1. **优化用户问题** — 修复错误，补充缺失上下文，提取核心查询意图。输出 clear, self-contained question.\n"
+    "2. **压缩对话历史记录** — 提取最近对话中的关键事实、用户目标和已给答案。输出 clear, self-contained question.\n\n"
+    "输出必须是以下 JSON 格式，不要添加任何额外内容：\n"
+    '{"optimized_query": "...", "compressed_context": "..."}'
 )
 
 # ── Constants ──
@@ -142,14 +194,15 @@ def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
     last_msg = state["messages"][-1].content if state["messages"] else ""
     history_msgs = list(state["messages"][:-1])
     formatted_history = _format_history(history_msgs)
-    prompt_text = INTENT_SYSTEM_PROMPT.format(
-        formatted_history=formatted_history, last_message=last_msg
-    )
     optimized_query = last_msg
     compressed_context = ""
     try:
         response: AIMessage = intent_llm.invoke([
-            SystemMessage(content=prompt_text),
+            SystemMessage(content=INTENT_SYSTEM_PROMPT),
+            HumanMessage(content=(
+                f"对话历史记录：\n{formatted_history}\n\n"
+                f"用户问题：{last_msg}"
+            )),
         ])
         text = response.content.strip()
         text = text.removeprefix("```json").removesuffix("```").strip()
@@ -281,7 +334,6 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
         source_counters[source_key] = idx + 1
 
         score = 0
-        compressed = ""
         try:
             safe_question = user_question[:MAX_QUESTION_CHARS]
             safe_chunk = chunk_text[:MAX_CHUNK_INPUT_CHARS]
@@ -299,26 +351,22 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
             text = text.removeprefix("```json").removesuffix("```").strip()
             parsed = json.loads(text)
             score = max(0, min(100, int(parsed.get("score", 0))))
-            compressed = parsed.get("compressed", "")
-            logger.info("Scored %s chunk %d: score=%d, compressed_len=%d",
-                        source_key, idx, score, len(compressed))
+            logger.info("Scored %s chunk %d: score=%d",
+                        source_key, idx, score)
         except Exception:
             logger.exception("Scoring failed for %s chunk %d, defaulting to 0", source_key, idx)
             score = 0
-            compressed = ""
 
         scored_chunks.append({
             "original": chunk_text,
             "source": source,
             "score": score,
-            "compressed": compressed,
         })
         writer({
             "type": "scoring",
             "source": source_key,
             "index": idx,
             "score": score,
-            "compressed": compressed,
         })
 
     writer({"type": "scoring", "source": "done", "done": True})
@@ -334,15 +382,15 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: i
     manual_chunks = state.get("manual_chunks", [])
     forum_chunks = state.get("forum_chunks", [])
 
-    if scored and any(c["score"] > 0 and c["compressed"] for c in scored):
+    if scored and any(c["score"] > 0 for c in scored):
         sorted_scored = sorted(scored, key=lambda c: c["score"], reverse=True)[:top_k_scored]
         manual_context = "\n\n".join(
-            c["compressed"][:MAX_COMPRESSED_CHARS] for c in sorted_scored
-            if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0 and c["compressed"]
+            c["original"] for c in sorted_scored
+            if c["source"] == SOURCE_MANUAL_LABEL and c["score"] > 0
         )
         forum_context = "\n\n".join(
-            c["compressed"][:MAX_COMPRESSED_CHARS] for c in sorted_scored
-            if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0 and c["compressed"]
+            c["original"] for c in sorted_scored
+            if c["source"] == SOURCE_FORUM_LABEL and c["score"] > 0
         )
         if not manual_context:
             manual_context = "（未检索到相关内容）"
