@@ -61,8 +61,7 @@ export default function RetrievalCard({ chunks }: RetrievalCardProps) {
       ))}
       {modalIndex !== null && (
         <DetailModal
-          content={sorted[modalIndex].compressed || sorted[modalIndex].preview}
-          original={sorted[modalIndex].preview}
+          content={sorted[modalIndex].preview}
           source={sorted[modalIndex].source}
           onClose={() => setModalIndex(null)}
         />

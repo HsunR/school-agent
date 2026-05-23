@@ -124,6 +124,16 @@ class ChromaManager:
         )
         return {"inserted": inserted, "skipped": skipped}
 
+    def warmup(self) -> None:
+        """Pre-load collections and vector index to avoid cold-start latency."""
+        for name in ALL_COLLECTIONS:
+            try:
+                collection = self._collection(name)
+                count = collection.count()
+                logger.info("Warmup: collection '%s' loaded (%d documents)", name, count)
+            except Exception:
+                logger.warning("Warmup: collection '%s' failed to load", name)
+
     def retrieve(self, category: str, query: str) -> list[str]:
         """Retrieve top-K text chunks from a collection by semantic similarity.
 

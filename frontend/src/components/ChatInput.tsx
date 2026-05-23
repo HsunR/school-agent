@@ -7,8 +7,6 @@ interface ChatInputProps {
   isLoading: boolean;
 }
 
-const MAX_CHARS = 1000;
-
 export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -48,9 +46,7 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
     [handleSend]
   );
 
-  const charCount = text.length;
-  const isOverLimit = charCount > MAX_CHARS;
-  const canSend = charCount > 0 && charCount <= MAX_CHARS && !isLoading;
+  const canSend = text.trim().length > 0 && !isLoading;
 
   return (
     <div className="flex items-end gap-3 border-t border-gray-200 bg-white px-4 py-3">
@@ -62,23 +58,11 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
           onKeyDown={handleKeyDown}
           placeholder="Type a message..."
           disabled={isLoading}
-          maxLength={MAX_CHARS + 100}
           rows={1}
           className="w-full resize-none rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 pr-16 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Message input"
         />
-        <span
-          data-testid="char-counter"
-          className={`absolute bottom-3 right-3 text-xs tabular-nums ${
-            isOverLimit
-              ? "text-red-500"
-              : charCount > 0
-                ? "text-gray-400"
-                : "text-gray-300"
-          }`}
-        >
-          {charCount.toLocaleString()}/1,000
-        </span>
+
       </div>
       <button
         type="button"

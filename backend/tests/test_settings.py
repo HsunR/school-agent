@@ -35,16 +35,19 @@ class TestSettingsDefaults:
         settings = Settings()
         assert settings.deepseek_api_key == ""
 
-    def test_default_scoring_llm_model(self):
-        settings = Settings()
+    def test_default_scoring_llm_model(self, monkeypatch):
+        monkeypatch.delenv("LLM_SCORING_MODEL", raising=False)
+        settings = Settings(_env_file=None)
         assert settings.llm_scoring_model == "deepseek-chat"
 
-    def test_default_scoring_llm_base_url(self):
-        settings = Settings()
+    def test_default_scoring_llm_base_url(self, monkeypatch):
+        monkeypatch.delenv("LLM_SCORING_BASE_URL", raising=False)
+        settings = Settings(_env_file=None)
         assert settings.llm_scoring_base_url == "https://api.deepseek.com/v1"
 
-    def test_default_scoring_llm_api_key_is_empty(self):
-        settings = Settings()
+    def test_default_scoring_llm_api_key_is_empty(self, monkeypatch):
+        monkeypatch.delenv("LLM_SCORING_API_KEY", raising=False)
+        settings = Settings(_env_file=None)
         assert settings.llm_scoring_api_key == ""
 
     def test_default_rag_top_k_scored(self):

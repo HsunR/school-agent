@@ -140,13 +140,19 @@ async def test_empty_messages_returns_422(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_oversize_message_returns_422(client: AsyncClient) -> None:
-    """Test that a message with content over 1000 characters returns 422."""
-    response = await client.post(
-        "/api/chat",
-        json={"messages": [{"role": "user", "content": "x" * 1001}]},
-    )
-    assert response.status_code == 422
+async def test_oversize_message_accepted(client: AsyncClient) -> None:
+    """Test that a message with content over 1000 characters is accepted."""
+    events = [
+        {"type": "token", "token": "Hello"},
+        {"type": "token", "token": "", "done": True},
+    ]
+    mock = _mock_service(lambda _messages: _event_gen(events))
+    with patch("app.api.chat.chat_service", mock):
+        response = await client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "x" * 1001}]},
+        )
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

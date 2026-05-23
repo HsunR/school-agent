@@ -42,12 +42,15 @@ class ChatService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
+        _temperature = settings.llm_temperature
+
         self.chat_llm = ChatOpenAI(
             model=settings.llm_chat_model,
             base_url=settings.llm_chat_base_url,
             api_key=settings.llm_chat_api_key,
             streaming=True,
             timeout=settings.llm_timeout,
+            temperature=_temperature,
         )
 
         self.routing_llm = ChatOpenAI(
@@ -56,6 +59,7 @@ class ChatService:
             api_key=settings.llm_routing_api_key,
             streaming=False,
             timeout=settings.llm_timeout,
+            temperature=_temperature,
         )
 
         self.embedding_client = EmbeddingClient(settings)
@@ -67,6 +71,7 @@ class ChatService:
             api_key=settings.llm_scoring_api_key,
             streaming=False,
             timeout=15,
+            temperature=_temperature,
         )
 
         self.intent_llm = ChatOpenAI(
@@ -75,6 +80,7 @@ class ChatService:
             api_key=settings.llm_intent_api_key,
             streaming=False,
             timeout=settings.llm_timeout,
+            temperature=_temperature,
         )
 
         self.graph = compile_graph(

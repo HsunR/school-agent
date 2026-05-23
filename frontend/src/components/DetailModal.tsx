@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback } from "react";
 
 interface DetailModalProps {
   content: string;
-  original?: string;
   source: string;
   onClose: () => void;
 }
 
-export default function DetailModal({ content, original, source, onClose }: DetailModalProps) {
-  const [tab, setTab] = useState<"compressed" | "original">("compressed");
-  const hasBoth = original && original !== content;
-
+export default function DetailModal({ content, source, onClose }: DetailModalProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -49,40 +45,9 @@ export default function DetailModal({ content, original, source, onClose }: Deta
           </button>
         </div>
 
-        {hasBoth && (
-          <div className="mb-3 flex gap-2 border-b border-gray-200 pb-2">
-            <button
-              onClick={() => setTab("compressed")}
-              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                tab === "compressed"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              提取后
-            </button>
-            <button
-              onClick={() => setTab("original")}
-              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                tab === "original"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              原文
-            </button>
-          </div>
-        )}
-
-        {tab === "compressed" ? (
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-            {content}
-          </div>
-        ) : (
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-500">
-            {original}
-          </div>
-        )}
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+          {content}
+        </div>
       </div>
     </div>
   );

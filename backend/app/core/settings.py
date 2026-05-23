@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     # ── Other ──
     max_input_length: int = 1000
     llm_timeout: int = 30
+    llm_temperature: float = 0.7
     app_name: str = "School Agent Backend"
 
     model_config = SettingsConfigDict(
