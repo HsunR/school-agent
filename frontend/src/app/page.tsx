@@ -81,15 +81,23 @@ export default function Home() {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <p className="select-none text-2xl text-gray-300">开始对话</p>
-            </div>
-          </div>
-        ) : (
-          messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)
-        )}
+        <div className="flex flex-col gap-4">
+          {/* Welcome message — always shown, independent of useChat state */}
+          <ChatMessage
+            message={{
+              id: "welcome",
+              role: "assistant",
+              content:
+                "你好呀！我是广师助手 🤗 有什么想问的尽管说——学习、生活、校园资讯，我都可以帮提供建议和意见",
+              timestamp: Date.now(),
+              isStreaming: false,
+            }}
+          />
+
+          {messages.map((msg) => (
+            <ChatMessage key={msg.id} message={msg} />
+          ))}
+        </div>
         <div ref={bottomRef} />
       </div>
 

@@ -30,12 +30,14 @@ function setupMockState(
 }
 
 describe("Chat Page", () => {
-  it("renders chat input and empty state", () => {
+  it("renders chat input and welcome message", () => {
     setupMockState();
 
     render(<Page />);
 
-    expect(screen.getByText("开始对话")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("你好呀！我是广师助手")),
+    ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText(/type a message/i),
     ).toBeInTheDocument();
@@ -54,7 +56,8 @@ describe("Chat Page", () => {
 
     render(<Page />);
 
-    expect(screen.getByTestId("chat-message")).toBeInTheDocument();
+    const messageEls = screen.getAllByTestId("chat-message");
+    expect(messageEls).toHaveLength(2);
     expect(screen.getByText("Hello, how are you?")).toBeInTheDocument();
   });
 
@@ -121,7 +124,7 @@ describe("Chat Page", () => {
     expect(textarea).toBeDisabled();
   });
 
-  it("does not show empty state when there are messages", () => {
+  it("still shows welcome message when user messages exist", () => {
     const messages = [
       {
         id: "1",
@@ -134,7 +137,10 @@ describe("Chat Page", () => {
 
     render(<Page />);
 
-    expect(screen.queryByText("开始对话")).not.toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("你好呀！我是广师助手")),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Hello")).toBeInTheDocument();
   });
 
   it("renders assistant messages with markdown", () => {
@@ -150,7 +156,8 @@ describe("Chat Page", () => {
 
     render(<Page />);
 
-    expect(screen.getByTestId("chat-message")).toBeInTheDocument();
+    const messageEls = screen.getAllByTestId("chat-message");
+    expect(messageEls).toHaveLength(2);
     // MarkdownRenderer should convert **bold** to <strong>
     expect(screen.getByText("bold")).toBeInTheDocument();
   });
@@ -219,7 +226,7 @@ describe("Chat Page", () => {
     render(<Page />);
 
     const messageEls = screen.getAllByTestId("chat-message");
-    expect(messageEls).toHaveLength(4);
+    expect(messageEls).toHaveLength(5);
     expect(screen.getByText("First")).toBeInTheDocument();
     expect(screen.getByText("Second")).toBeInTheDocument();
     expect(screen.getByText("Reply 1")).toBeInTheDocument();
