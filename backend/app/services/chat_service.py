@@ -101,9 +101,12 @@ class ChatService:
     async def stream_chat(
         self,
         messages: list[ChatMessage],
+        retrieval_mode: str = "auto",
+        settings: dict | None = None,
     ) -> AsyncGenerator[str, Any]:
         """Stream a chat response with SSE-typed events via graph.astream(custom)."""
         langchain_messages = self._to_langchain(messages)
+        resolved_settings = settings or {}
 
         initial_state = {
             "messages": langchain_messages,
@@ -116,6 +119,8 @@ class ChatService:
             "scored_chunks": [],
             "optimized_query": "",
             "compressed_context": "",
+            "retrieval_mode": retrieval_mode,
+            "settings": resolved_settings,
         }
 
         try:

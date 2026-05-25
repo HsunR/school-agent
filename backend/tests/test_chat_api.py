@@ -14,7 +14,7 @@ async def _event_gen(events: list[dict]) -> AsyncGenerator[str, None]:
         yield json.dumps(event, ensure_ascii=False)
 
 
-async def _error_gen(_messages: list) -> AsyncGenerator[str, None]:
+async def _error_gen(*_) -> AsyncGenerator[str, None]:
     """Helper: async generator that raises on first iteration."""
     raise RuntimeError("Something went wrong")
     # fmt: off
@@ -43,7 +43,7 @@ async def test_sse_content_type(client: AsyncClient) -> None:
         {"type": "token", "token": "Hello"},
         {"type": "token", "token": "", "done": True},
     ]
-    mock = _mock_service(lambda _messages: _event_gen(events))
+    mock = _mock_service(lambda *_: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -61,7 +61,7 @@ async def test_sse_stream_format(client: AsyncClient) -> None:
         {"type": "token", "token": "Hello"},
         {"type": "token", "token": "", "done": True},
     ]
-    mock = _mock_service(lambda _messages: _event_gen(events))
+    mock = _mock_service(lambda *_: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -82,7 +82,7 @@ async def test_sse_ends_with_done_true(client: AsyncClient) -> None:
         {"type": "token", "token": "Hello"},
         {"type": "token", "token": "", "done": True},
     ]
-    mock = _mock_service(lambda _messages: _event_gen(events))
+    mock = _mock_service(lambda *_: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -108,7 +108,7 @@ async def test_sse_tokens_in_order(client: AsyncClient) -> None:
         {"type": "token", "token": "Token3"},
         {"type": "token", "token": "", "done": True},
     ]
-    mock = _mock_service(lambda _messages: _event_gen(events))
+    mock = _mock_service(lambda *_: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -146,7 +146,7 @@ async def test_oversize_message_accepted(client: AsyncClient) -> None:
         {"type": "token", "token": "Hello"},
         {"type": "token", "token": "", "done": True},
     ]
-    mock = _mock_service(lambda _messages: _event_gen(events))
+    mock = _mock_service(lambda *_: _event_gen(events))
     with patch("app.api.chat.chat_service", mock):
         response = await client.post(
             "/api/chat",
@@ -229,7 +229,7 @@ async def test_integration_mocked_service_sse_flow(
         {"type": "token", "token": "World"},
         {"type": "token", "token": "", "done": True},
     ]
-    mock_chat_service.stream_chat = lambda _msgs: _event_gen(events)  # noqa: E731
+    mock_chat_service.stream_chat = lambda *_: _event_gen(events)  # noqa: E731
 
     with patch("app.api.chat.chat_service", mock_chat_service):
         response = await client.post(
@@ -256,7 +256,7 @@ async def test_integration_mocked_service_error(
     mock_chat_service: MagicMock,
 ) -> None:
     """Integration test: service exception yields SSE error chunk."""
-    async def _error_stream(_messages):  # noqa: ANN202
+    async def _error_stream(*_):  # noqa: ANN202
         raise RuntimeError("LLM failure")
         yield  # pragma: no cover — makes this an async generator
 
