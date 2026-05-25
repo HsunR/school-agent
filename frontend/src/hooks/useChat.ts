@@ -1,23 +1,52 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import type { ChatMessage, SSEPayload } from "@/types/chat";
+import type { ChatMessage, SSEPayload, RetrievalMode, RetrievalSettings } from "@/types/chat";
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 11);
+}
+
+const STORAGE_KEY_MODE = "retrieval_mode";
+const STORAGE_KEY_SETTINGS = "retrieval_settings";
+
+const DEFAULT_SETTINGS: RetrievalSettings = {
+  top_k_manual: 6,
+  top_k_forum: 6,
+  top_k_scored: 3,
+};
+
+function loadStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>(
+    () => loadStorage<RetrievalMode>(STORAGE_KEY_MODE, "auto"),
+  );
+  const [settings, setSettings] = useState<RetrievalSettings>(
+    () => loadStorage<RetrievalSettings>(STORAGE_KEY_SETTINGS, DEFAULT_SETTINGS),
+  );
 
   const isLoadingRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const retrievalModeRef = useRef<RetrievalMode>(retrievalMode);
+  const settingsRef = useRef<RetrievalSettings>(settings);
 
   // Keep refs in sync with current state
   messagesRef.current = messages;
   isLoadingRef.current = isLoading;
+  retrievalModeRef.current = retrievalMode;
+  settingsRef.current = settings;
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim();
@@ -58,6 +87,8 @@ export function useChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...historyMessages, userMessage],
+          retrieval_mode: retrievalModeRef.current,
+          settings: settingsRef.current,
         }),
       });
 
@@ -222,6 +253,16 @@ export function useChat() {
     setError(null);
   }, []);
 
+  const setRetrievalModeAndPersist = useCallback((mode: RetrievalMode) => {
+    setRetrievalMode(mode);
+    try { localStorage.setItem(STORAGE_KEY_MODE, JSON.stringify(mode)); } catch {}
+  }, []);
+
+  const setSettingsAndPersist = useCallback((s: RetrievalSettings) => {
+    setSettings(s);
+    try { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(s)); } catch {}
+  }, []);
+
   return {
     messages,
     isLoading,
@@ -229,5 +270,9 @@ export function useChat() {
     sendMessage,
     clearMessages,
     clearError,
+    retrievalMode,
+    setRetrievalMode: setRetrievalModeAndPersist,
+    settings,
+    setSettings: setSettingsAndPersist,
   };
 }

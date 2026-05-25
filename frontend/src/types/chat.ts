@@ -19,6 +19,14 @@ export interface RetrievalPreview {
   compressed?: string;
 }
 
+export type RetrievalMode = "auto" | "manual" | "forum" | "both" | "none";
+
+export interface RetrievalSettings {
+  top_k_manual: number;
+  top_k_forum: number;
+  top_k_scored: number;
+}
+
 export interface SSEPayload {
   type: "status" | "retrieval" | "scoring" | "token" | "intent" | "error";
   token?: string;
