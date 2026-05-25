@@ -294,6 +294,35 @@ def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
 def routing_node(state: ChatState, llm: BaseChatModel) -> dict:
     """Classify whether the user question needs each knowledge source."""
     writer = get_stream_writer()
+    retrieval_mode = state.get("retrieval_mode", "auto")
+
+    # Non-auto modes: skip LLM, force flags based on user selection
+    if retrieval_mode != "auto":
+        search_manual = retrieval_mode in ("manual", "both")
+        search_forum = retrieval_mode in ("forum", "both")
+        raw = state.get("optimized_query", "")
+        search_query = raw.strip() or (state["messages"][-1].content if state["messages"] else "")
+        writer({
+            "type": "status",
+            "node": "routing",
+            "label": "正在分析你的问题...",
+            "decision": {
+                "search_manual": search_manual,
+                "search_forum": search_forum,
+            },
+        })
+        logger.info(
+            "Routing (user override '%s'): manual=%s, forum=%s",
+            retrieval_mode, search_manual, search_forum,
+        )
+        return {
+            "search_manual": search_manual,
+            "search_forum": search_forum,
+            "search_query_manual": search_query if search_manual else "",
+            "search_query_forum": search_query if search_forum else "",
+        }
+
+    # Auto mode: LLM-based routing below
     raw = state.get("optimized_query", "")
     last_msg = raw.strip() or (state["messages"][-1].content if state["messages"] else "")
     parsed = _parse_json_llm_response(
