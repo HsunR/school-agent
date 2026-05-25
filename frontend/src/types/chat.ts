@@ -12,6 +12,11 @@ export interface ChatMessage {
   optimizedQuery?: string;
 }
 
+export interface SelectedChunk {
+  source: string;
+  preview: string;
+}
+
 export interface RetrievalPreview {
   preview: string;
   source: string;
@@ -28,7 +33,7 @@ export interface RetrievalSettings {
 }
 
 export interface SSEPayload {
-  type: "status" | "retrieval" | "scoring" | "token" | "intent" | "error";
+  type: "status" | "retrieval" | "scoring" | "token" | "intent" | "error" | "context_selected";
   token?: string;
   done?: boolean;
   error?: string;
@@ -37,6 +42,7 @@ export interface SSEPayload {
   decision?: { search_manual: boolean; search_forum: boolean };
   source?: string;
   chunks?: RetrievalPreview[];
+  selected?: SelectedChunk[];
   index?: number;
   score?: number;
   compressed?: string;
