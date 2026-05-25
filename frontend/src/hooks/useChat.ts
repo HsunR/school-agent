@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ChatMessage, SSEPayload, RetrievalMode, RetrievalSettings } from "@/types/chat";
+import type { ChatMessage, SSEPayload, RetrievalMode, RetrievalSettings, SelectedChunk } from "@/types/chat";
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 11);
@@ -32,6 +32,10 @@ export function useChat() {
   const [error, setError] = useState<string | null>(null);
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("auto");
   const [settings, setSettings] = useState<RetrievalSettings>(DEFAULT_SETTINGS);
+
+  const [selectedChunks, setSelectedChunks] = useState<SelectedChunk[]>([]);
+  const selectedChunksRef = useRef<SelectedChunk[]>(selectedChunks);
+  selectedChunksRef.current = selectedChunks;
 
   // Sync from localStorage after hydration to avoid SSR mismatch
   useEffect(() => {
@@ -205,6 +209,11 @@ export function useChat() {
               continue;
             }
 
+            if (payload.type === "context_selected" && payload.selected) {
+              setSelectedChunks(payload.selected);
+              continue;
+            }
+
             if (payload.type === "token") {
               if (payload.token) {
                 setMessages((prev) => {
@@ -278,5 +287,6 @@ export function useChat() {
     setRetrievalMode: setRetrievalModeAndPersist,
     settings,
     setSettings: setSettingsAndPersist,
+    selectedChunks,
   };
 }
