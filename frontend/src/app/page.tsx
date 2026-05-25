@@ -13,6 +13,10 @@ export default function Home() {
     sendMessage,
     clearMessages,
     clearError,
+    retrievalMode,
+    setRetrievalMode,
+    settings,
+    setSettings,
   } = useChat();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -118,7 +122,14 @@ export default function Home() {
       </div>
 
       {/* Input area */}
-      <ChatInput onSend={sendMessage} isLoading={isLoading} />
+      <ChatInput
+        onSend={sendMessage}
+        isLoading={isLoading}
+        retrievalMode={retrievalMode}
+        onRetrievalModeChange={setRetrievalMode}
+        settings={settings}
+        onSettingsChange={setSettings}
+      />
     </div>
   );
 }
