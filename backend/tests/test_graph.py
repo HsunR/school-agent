@@ -176,6 +176,8 @@ class TestGraphInvocation:
             "manual_chunks": [],
             "forum_chunks": [],
             "scored_chunks": [],
+            "retrieval_mode": "auto",
+            "settings": {},
         }
 
         token_events = []
@@ -200,6 +202,8 @@ class TestGraphInvocation:
             "manual_chunks": [],
             "forum_chunks": [],
             "scored_chunks": [],
+            "retrieval_mode": "auto",
+            "settings": {},
         }
 
         result = manual_retrieval_node(state, mock_chroma)
@@ -250,6 +254,8 @@ class TestAnswerNode:
             "manual_chunks": ["第四十一条 旷课处分规定..."],
             "forum_chunks": [],
             "scored_chunks": [],
+            "retrieval_mode": "auto",
+            "settings": {},
         }
 
         with patch("app.graph.graph.get_stream_writer") as mock_writer:

@@ -16,4 +16,6 @@ class ChatRequest(BaseModel):
     """Request payload for chat completion."""
 
     messages: list[ChatMessage] = Field(..., min_length=1)
+    retrieval_mode: Literal["auto", "manual", "forum", "both", "none"] = "auto"
+    settings: Optional[dict[str, int]] = None  # keys: top_k_manual, top_k_forum, top_k_scored
 
