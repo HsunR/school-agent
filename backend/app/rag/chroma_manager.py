@@ -134,19 +134,24 @@ class ChromaManager:
             except Exception:
                 logger.warning("Warmup: collection '%s' failed to load", name)
 
-    def retrieve(self, category: str, query: str) -> list[str]:
+    def retrieve(self, category: str, query: str, top_k: int | None = None) -> list[str]:
         """Retrieve top-K text chunks from a collection by semantic similarity.
 
         Args:
             category: Collection name.
             query: The user's question or query text.
+            top_k: Override the default result count. If ``None``, uses the
+                configured default for the collection.
 
         Returns:
             A list of chunk text strings, ordered by relevance.
         """
         collection = self._collection(category)
         query_embedding = self.embedding_client.embed([query])[0]
-        n_results = self.top_k_manual if category == "student_manual" else self.top_k_forum
+        if top_k is not None:
+            n_results = top_k
+        else:
+            n_results = self.top_k_manual if category == "student_manual" else self.top_k_forum
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=n_results,
