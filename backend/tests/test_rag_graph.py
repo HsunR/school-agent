@@ -380,6 +380,43 @@ async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
 
 
 @patch("app.graph.graph.get_stream_writer")
+@pytest.mark.asyncio
+async def test_answer_node_emits_context_selected(mock_writer):
+    """answer_node should emit context_selected with selected chunks."""
+    from app.graph.graph import answer_node
+
+    chat_llm = MagicMock()
+    async def _mock_astream(messages):
+        yield AIMessageChunk(content="Answer")
+    chat_llm.astream = _mock_astream
+
+    state = {
+        "messages": [HumanMessage(content="test")],
+        "search_manual": True,
+        "search_forum": False,
+        "search_query_manual": "test",
+        "search_query_forum": "",
+        "manual_chunks": ["chunk A content here"],
+        "forum_chunks": [],
+        "scored_chunks": [
+            {"original": "chunk A content here", "source": "学生手册", "score": 90},
+        ],
+        "retrieval_mode": "auto",
+        "settings": {"top_k_scored": 3},
+    }
+
+    result = await answer_node(state, chat_llm)
+
+    writer_calls = mock_writer.return_value.call_args_list
+    context_events = [call[0][0] for call in writer_calls if call[0][0].get("type") == "context_selected"]
+    assert len(context_events) == 1, "Expected exactly one context_selected event"
+    event = context_events[0]
+    assert "selected" in event
+    assert len(event["selected"]) == 1
+    assert event["selected"][0]["source"] == "学生手册"
+
+
+@patch("app.graph.graph.get_stream_writer")
 def test_intent_node_emits_intent_event(mock_writer):
     """Verify intent_node emits correct optimized_query and compressed_context."""
     from app.graph.graph import intent_node
