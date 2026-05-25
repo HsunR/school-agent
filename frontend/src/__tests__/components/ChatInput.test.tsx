@@ -13,7 +13,7 @@ describe("ChatInput", () => {
     render(<ChatInput onSend={vi.fn()} isLoading={false} />);
 
     expect(
-      screen.getByPlaceholderText(/type a message/i)
+      screen.getByPlaceholderText(/请输入/i)
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /send/i })).toBeInTheDocument();
   });
@@ -28,7 +28,7 @@ describe("ChatInput", () => {
     const user = userEvent.setup();
     render(<ChatInput onSend={vi.fn()} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     await user.type(textarea, "Hello");
 
     expect(screen.getByRole("button", { name: /send/i })).toBeEnabled();
@@ -37,7 +37,7 @@ describe("ChatInput", () => {
   it("input and button are disabled when isLoading is true", () => {
     render(<ChatInput onSend={vi.fn()} isLoading={true} />);
 
-    expect(screen.getByPlaceholderText(/type a message/i)).toBeDisabled();
+    expect(screen.getByPlaceholderText(/请输入/i)).toBeDisabled();
     expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   });
 
@@ -46,7 +46,7 @@ describe("ChatInput", () => {
     const user = userEvent.setup();
     render(<ChatInput onSend={onSend} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     await user.type(textarea, "Test message");
 
     await user.click(screen.getByRole("button", { name: /send/i }));
@@ -59,7 +59,7 @@ describe("ChatInput", () => {
     const user = userEvent.setup();
     render(<ChatInput onSend={onSend} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     await user.type(textarea, "Enter message");
 
     await user.keyboard("{Enter}");
@@ -72,7 +72,7 @@ describe("ChatInput", () => {
     const user = userEvent.setup();
     render(<ChatInput onSend={onSend} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     await user.type(textarea, "Shift enter");
     await user.keyboard("{Shift>}{Enter}{/Shift}");
 
@@ -84,7 +84,7 @@ describe("ChatInput", () => {
     const user = userEvent.setup();
     render(<ChatInput onSend={onSend} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     await user.type(textarea, "   ");
 
     await user.click(screen.getByRole("button", { name: /send/i }));
@@ -97,7 +97,7 @@ describe("ChatInput", () => {
     const user = userEvent.setup();
     render(<ChatInput onSend={onSend} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     await user.type(textarea, "   ");
     await user.keyboard("{Enter}");
 
@@ -107,7 +107,7 @@ describe("ChatInput", () => {
   it("enables send button for long input", async () => {
     render(<ChatInput onSend={vi.fn()} isLoading={false} />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     fireEvent.change(textarea, { target: { value: "a".repeat(1001) } });
 
     expect(screen.getByRole("button", { name: /send/i })).toBeEnabled();

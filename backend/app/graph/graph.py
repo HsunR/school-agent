@@ -97,11 +97,11 @@ RETRIEVAL_CONTEXT_TEMPLATE = (
     "当前系统是「广师小助手」，所属广东技术师范大学，你是系统的检索节点，。\n"
     "以下是从校园知识库中检索到的相关信息，请结合这些信息回答用户问题。\n"
     "如果检索到的内容与问题无关，请忽略它们。\n\n"
-    "-----以下是从校园知识库中检索到的相关信息-----"
+    "-----以下是从校园知识库中检索到的相关信息-----\n"
     "【学生手册】\n{manual_context}\n\n"
     "【学校贴吧】\n{forum_context}\n\n"
-    "-----结束从校园知识库中检索到的相关信息------"
-    "请用中文回答。"
+    "-----结束从校园知识库中检索到的相关信息------\n"
+    "请用中文回答。\n"
     "【important你的核心任务】：以上是系统从校园知识库中检索到的相关信息给你辅助回答用户问题的信息，不是用户给你的，请结合这些信息回答用户问题。"
 )
 
@@ -482,15 +482,20 @@ async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: i
             )
         )
     compressed = state.get("compressed_context", "")
-    if compressed:
-        context_parts.append(f"对话摘要（历史上下文）：{compressed}")
-
     optimized = state.get("optimized_query", "")
     last_raw = state["messages"][-1].content if state["messages"] else ""
     user_question = optimized.strip() or last_raw
 
     if context_parts:
-        user_content = "\n\n".join(context_parts) + "\n\n" + user_question
+        if compressed:
+            context_parts.append(
+                "【以下是对话摘要（历史上下文）和用户这轮发给你的对话消息】\n"
+                f"对话摘要（历史上下文）：{compressed}\n"
+                f"用户对话消息：{user_question}"
+            )
+        else:
+            context_parts.append(f"用户对话消息：{user_question}")
+        user_content = "\n\n".join(context_parts)
     else:
         user_content = user_question
 

@@ -180,7 +180,7 @@ const x = 1;
     );
     const link = container.querySelector("a");
     expect(link?.className).toContain("underline");
-    expect(link?.className).toContain("text-blue-600");
+    expect(link?.className).toContain("text-brand");
   });
 
   // 16. Image renders with constrained width

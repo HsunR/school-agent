@@ -21,7 +21,7 @@ describe("RetrievalCard", () => {
       { preview: "宿舍管理费每学期500元", source: "学校贴吧", score: 85 },
     ];
     render(<RetrievalCard chunks={chunks} />);
-    const detailButton = screen.getByText("详情");
+    const detailButton = screen.getByText("详情 →");
     fireEvent.click(detailButton);
     expect(screen.getByText("宿舍管理费每学期500元")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();

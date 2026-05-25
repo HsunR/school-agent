@@ -44,7 +44,7 @@ const components: Components = {
   a: ({ children, href }) => (
     <a
       href={href}
-      className="text-blue-600 underline hover:text-blue-800"
+      className="text-brand underline hover:text-orange-700"
     >
       {children}
     </a>

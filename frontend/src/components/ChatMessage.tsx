@@ -8,6 +8,49 @@ interface ChatMessageProps {
   message: ChatMessageType;
 }
 
+function BentoCard({
+  children,
+  className = "",
+  bg = "bg-bg-card",
+  padding = "p-6",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  bg?: string;
+  padding?: string;
+}) {
+  return (
+    <div className={`rounded-2xl ${bg} ${padding} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function SectionCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl bg-bg-soft px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+      {children}
+    </div>
+  );
+}
+
+function Heading({
+  dotColor,
+  children,
+}: {
+  dotColor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
+      <span className="font-display text-base font-semibold text-black">
+        {children}
+      </span>
+    </div>
+  );
+}
+
 export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
   const timestamp = new Date(message.timestamp).toLocaleTimeString("en-US", {
@@ -18,65 +61,80 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
   if (message.role === "status") {
     return (
-      <div data-testid="chat-message" className="mb-4 flex justify-start">
-        <div className="max-w-[80%] rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-500">
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-gray-400">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+      <div data-testid="chat-message">
+        <BentoCard className="flex flex-col gap-3">
+          <Heading dotColor="bg-brand">
             {message.node === "routing" ? "系统分析" : "系统"}
-          </div>
-          <div className="text-sm">{message.content}</div>
-          {message.decision && (
-            <div className="mt-1 text-xs text-gray-400">
-              {message.decision.search_manual && "📖 需要查学生手册 "}
-              {message.decision.search_forum && "💬 需要查学校贴吧 "}
-              {!message.decision.search_manual && !message.decision.search_forum && "无需检索，直接回答"}
+          </Heading>
+          <SectionCard>
+            <div className="text-sm leading-relaxed text-text-body">
+              {message.content}
             </div>
-          )}
-        </div>
+            {message.decision && (
+              <div className="mt-1.5 text-xs text-text-tertiary">
+                {message.decision.search_manual && "📖 需要查学生手册 "}
+                {message.decision.search_forum && "💬 需要查学校贴吧 "}
+                {!message.decision.search_manual &&
+                  !message.decision.search_forum &&
+                  "无需检索，直接回答"}
+              </div>
+            )}
+          </SectionCard>
+        </BentoCard>
       </div>
     );
   }
 
   if (message.role === "intent") {
     return (
-      <div data-testid="chat-message" className="mb-4 flex justify-start">
-        <div className="max-w-[80%] rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3">
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-purple-400">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-purple-400" />
-            意图分析
-          </div>
-          <div className="text-sm text-gray-600">{message.content}</div>
-          {message.optimizedQuery && (
-            <div className="mt-1 text-xs text-purple-600">
-              优化后查询: {message.optimizedQuery}
+      <div data-testid="chat-message">
+        <BentoCard className="flex flex-col gap-3">
+          <Heading dotColor="bg-brand">意图分析</Heading>
+          <SectionCard>
+            <div className="text-sm leading-relaxed text-text-body">
+              {message.content}
             </div>
-          )}
-        </div>
+            {message.optimizedQuery && (
+              <div className="mt-1.5 text-xs font-medium text-brand">
+                优化后查询: {message.optimizedQuery}
+              </div>
+            )}
+          </SectionCard>
+        </BentoCard>
       </div>
     );
   }
 
   if (message.role === "retrieval") {
     return (
-      <div data-testid="chat-message" className="mb-4 flex justify-start">
-        <div className="max-w-[80%] rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
-          <div className="mb-2 text-xs font-semibold text-green-700">
+      <div data-testid="chat-message">
+        <BentoCard className="flex flex-col gap-3.5">
+          <span className="font-display text-base font-semibold text-black">
             📄 {message.content}
-          </div>
+          </span>
           {message.chunks && <RetrievalCard chunks={message.chunks} />}
-        </div>
+        </BentoCard>
       </div>
     );
   }
 
   if (isUser) {
     return (
-      <div data-testid="chat-message" className="mb-4 flex justify-end">
-        <div className="max-w-[80%] rounded-2xl bg-blue-500 px-4 py-3 text-white">
-          <div className="mb-1 text-xs font-semibold text-blue-100">You</div>
-          <div className="text-sm leading-relaxed text-white">{message.content}</div>
-          <div className="mt-1 flex items-center justify-end gap-1">
-            <span data-testid="message-timestamp" className="text-xs text-blue-200">{timestamp}</span>
+      <div data-testid="chat-message" className="flex justify-end">
+        <div className="w-fit max-w-[80%] rounded-2xl bg-bg-user px-7 py-6">
+          <div className="font-display text-[15px] font-semibold text-[#5D4037]">
+            🧑 You
+          </div>
+          <div className="mt-2 text-[15px] leading-relaxed text-[#5D4037]">
+            {message.content}
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-1">
+            <span
+              data-testid="message-timestamp"
+              className="text-xs text-[#8D6E63]"
+            >
+              {timestamp}
+            </span>
           </div>
         </div>
       </div>
@@ -84,19 +142,29 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   }
 
   return (
-    <div data-testid="chat-message" className="mb-4 flex justify-start">
-      <div className="max-w-[80%] rounded-2xl bg-gray-100 px-4 py-3 text-gray-900">
-        <div className="mb-1 text-xs font-semibold text-gray-500">AI</div>
-        <div className="prose prose-sm max-w-none text-sm leading-relaxed">
+    <div data-testid="chat-message">
+      <BentoCard className="flex flex-col gap-3.5">
+        <span className="font-display text-[15px] font-semibold text-brand">
+          🤖 广师大助手
+        </span>
+        <div className="prose prose-sm max-w-none text-sm leading-relaxed text-text-body">
           <MarkdownRenderer content={message.content} />
         </div>
-        <div className="mt-1 flex items-center justify-end gap-1">
-          <span data-testid="message-timestamp" className="text-xs text-gray-400">{timestamp}</span>
+        <div className="flex items-center justify-end gap-1">
+          <span
+            data-testid="message-timestamp"
+            className="text-xs text-text-tertiary"
+          >
+            {timestamp}
+          </span>
           {message.isStreaming && (
-            <span data-testid="streaming-cursor" className="inline-block h-4 w-2 animate-pulse rounded-sm bg-gray-500" />
+            <span
+              data-testid="streaming-cursor"
+              className="inline-block h-4 w-2 animate-pulse rounded-sm bg-text-tertiary"
+            />
           )}
         </div>
-      </div>
+      </BentoCard>
     </div>
   );
 }

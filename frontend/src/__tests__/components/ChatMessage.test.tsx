@@ -23,23 +23,23 @@ describe("ChatMessage", () => {
     expect(messageEl).toHaveClass("justify-end");
   });
 
-  it("renders assistant message with left alignment", () => {
+  it("renders assistant message", () => {
     const msg: ChatMessageType = { ...baseMessage, role: "assistant" };
     render(<ChatMessage message={msg} />);
 
-    const messageEl = screen.getByTestId("chat-message");
-    expect(messageEl).toHaveClass("justify-start");
+    expect(screen.getByTestId("chat-message")).toBeInTheDocument();
+    expect(screen.getByText(/广师大助手/)).toBeInTheDocument();
   });
 
-  it("shows 'You' label for user messages", () => {
+  it("shows '🧑 You' label for user messages", () => {
     render(<ChatMessage message={baseMessage} />);
-    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByText(/You/)).toBeInTheDocument();
   });
 
-  it("shows 'AI' label for assistant messages", () => {
+  it("shows '🤖 广师大助手' label for assistant messages", () => {
     const msg: ChatMessageType = { ...baseMessage, role: "assistant" };
     render(<ChatMessage message={msg} />);
-    expect(screen.getByText("AI")).toBeInTheDocument();
+    expect(screen.getByText(/广师大助手/)).toBeInTheDocument();
   });
 
   it("renders assistant message content via markdown", () => {
@@ -89,13 +89,12 @@ describe("ChatMessage", () => {
     expect(screen.getByText(longContent)).toBeInTheDocument();
   });
 
-  it("renders system messages with left alignment and AI label", () => {
+  it("renders system messages", () => {
     const msg: ChatMessageType = { ...baseMessage, role: "system" };
     render(<ChatMessage message={msg} />);
 
-    const messageEl = screen.getByTestId("chat-message");
-    expect(messageEl).toHaveClass("justify-start");
-    expect(screen.getByText("AI")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-message")).toBeInTheDocument();
+    expect(screen.getByText(/广师大助手/)).toBeInTheDocument();
   });
 
   it("renders empty assistant message without error", () => {
@@ -107,7 +106,7 @@ describe("ChatMessage", () => {
     render(<ChatMessage message={msg} />);
 
     expect(screen.getByTestId("chat-message")).toBeInTheDocument();
-    expect(screen.getByText("AI")).toBeInTheDocument();
+    expect(screen.getByText(/广师大助手/)).toBeInTheDocument();
   });
 
   it("renders intent card with optimized query", () => {

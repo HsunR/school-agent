@@ -17,31 +17,12 @@ export default function Home() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const hasUserOrAssistantMessages = messages.some(
-    (msg) => msg.role === "user" || msg.role === "assistant",
-  );
-
   return (
-    <div className="flex h-full flex-col">
-      {/* Chat header with clear button */}
-      {hasUserOrAssistantMessages && (
-        <div className="flex items-center justify-end border-b border-gray-200 px-4 py-2">
-          <button
-            type="button"
-            onClick={clearMessages}
-            className="rounded-md px-3 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
-            aria-label="Clear chat"
-          >
-            Clear chat
-          </button>
-        </div>
-      )}
-
+    <div className="flex h-full flex-col bg-background">
       {/* Error banner */}
       {error && (
         <div
@@ -79,10 +60,45 @@ export default function Home() {
         </div>
       )}
 
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 bg-background pb-2 pt-4">
+        <div className="mx-auto flex max-w-[700px] items-center justify-between rounded-2xl bg-bg-card px-7 py-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="h-5 w-5 text-white"
+              >
+                <path d="M11.7 2.805a.75.75 0 0 1 .6 0A60.65 60.65 0 0 1 22.83 8.72a.75.75 0 0 1-.231 1.337 49.948 49.948 0 0 0-9.902 3.912l-.003.002c-.114.06-.227.119-.34.18a.75.75 0 0 1-.707 0A50.88 50.88 0 0 0 7.5 12.173v-.224c0-.131.01-.262.03-.393l.028-.24a49.474 49.474 0 0 1-.494-1.043.75.75 0 0 1 .292-1.017 51.28 51.28 0 0 0 3.709-3.038.75.75 0 0 1 .937-.064 50.207 50.207 0 0 0 5.2 2.654.75.75 0 0 1-.582 1.383 28.979 28.979 0 0 1-2.218-.94v.733a49.93 49.93 0 0 1-2.51 1.3.75.75 0 0 1-.604 0 48.627 48.627 0 0 0-3.878-1.685 50.584 50.584 0 0 1-2.233-.9.75.75 0 0 1-.262-1.203 50.466 50.466 0 0 0 1.3-1.784 50.468 50.468 0 0 1 3.36-4.025A.75.75 0 0 1 11.7 2.805Z" />
+              </svg>
+            </div>
+            <span className="font-display text-xl font-semibold text-black">
+              广师大助手
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-green-500" />
+              <span className="text-sm text-text-tertiary">在线</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearMessages}
+              className="rounded-lg border border-brand bg-transparent px-4 py-1.5 text-sm text-brand transition-colors hover:bg-brand-light"
+              aria-label="Clear chat"
+            >
+              清除对话
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="flex flex-col gap-4">
-          {/* Welcome message — always shown, independent of useChat state */}
+      <div className="flex-1 overflow-y-auto px-4 pb-6">
+        <div className="mx-auto flex max-w-[700px] flex-col gap-3">
+          {/* Welcome message */}
           <ChatMessage
             message={{
               id: "welcome",
@@ -97,8 +113,8 @@ export default function Home() {
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
+          <div ref={bottomRef} />
         </div>
-        <div ref={bottomRef} />
       </div>
 
       {/* Input area */}

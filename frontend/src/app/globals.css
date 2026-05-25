@@ -1,28 +1,40 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fcfaf7;
+  --foreground: #111827;
+  --brand: #FF9800;
+  --brand-light: #FFF3E0;
+  --bg-card: #FFFFFF;
+  --bg-user: #FFE0B2;
+  --bg-soft: #FCFAF7;
+  --text-secondary: #6B7280;
+  --text-tertiary: #999999;
+  --text-body: #666666;
+  --border-soft: #E8E0D5;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-bg-card: var(--bg-card);
+  --color-bg-user: var(--bg-user);
+  --color-bg-soft: var(--bg-soft);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-body: var(--text-body);
+  --color-border-soft: var(--border-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 /* ── Custom scrollbar ── */
@@ -108,6 +120,19 @@ body {
 .prose h3:first-child,
 .prose h4:first-child {
   margin-top: 0;
+}
+
+/* ── Bento card base ── */
+.bento-card {
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 24px;
+}
+
+.bento-card-sm {
+  border-radius: 12px;
+  background: #fcfaf7;
+  padding: 16px;
 }
 
 /* ── Blinking cursor animation ── */

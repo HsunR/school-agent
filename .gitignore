@@ -31,6 +31,12 @@ env/
 .pip/
 .tox/
 
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
 # IDE
 .vscode/
 .idea/
@@ -50,7 +56,8 @@ Desktop.ini
 .env.*.local
 .envrc
 
-# OpenCode internal tracking
+# AI tools
+.claude/
 .sisyphus/
 
 # Auto-generated
@@ -66,6 +73,7 @@ backend/app/services/sensors/
 
 # ChromaDB persistent storage
 backend/chroma_db/
+backend/test_chroma_db/
 
 # Design docs & plans
 docs/

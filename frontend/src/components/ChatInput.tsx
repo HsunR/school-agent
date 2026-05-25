@@ -49,37 +49,38 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const canSend = text.trim().length > 0 && !isLoading;
 
   return (
-    <div className="flex items-end gap-3 border-t border-gray-200 bg-white px-4 py-3">
-      <div className="relative flex-1">
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          disabled={isLoading}
-          rows={1}
-          className="w-full resize-none rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 pr-16 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="Message input"
-        />
-
-      </div>
-      <button
-        type="button"
-        onClick={handleSend}
-        disabled={!canSend}
-        aria-label="Send"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="h-5 w-5"
+    <div className="mx-auto w-full max-w-[700px] px-4 pb-4">
+      <div className="flex items-center gap-3 rounded-2xl bg-bg-card px-5 py-5">
+        <div className="relative flex-1">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder="请输入..."
+            disabled={isLoading}
+            rows={1}
+            className="w-full resize-none rounded-xl border border-border-soft bg-bg-soft px-5 py-3 text-sm text-foreground placeholder-text-tertiary outline-none transition-colors focus:border-brand focus:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Message input"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!canSend}
+          aria-label="Send"
+          className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-brand text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-        </svg>
-      </button>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="h-5 w-5"
+          >
+            <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

@@ -39,7 +39,7 @@ describe("Chat Page", () => {
       screen.getByText((content) => content.includes("你好呀！我是广师助手")),
     ).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText(/type a message/i),
+      screen.getByPlaceholderText(/请输入/i),
     ).toBeInTheDocument();
   });
 
@@ -83,17 +83,9 @@ describe("Chat Page", () => {
     expect(clearError).toHaveBeenCalledTimes(1);
   });
 
-  it("clear chat button calls clearMessages when messages exist", async () => {
+  it("clear chat button calls clearMessages", async () => {
     const clearMessages = vi.fn();
-    const messages = [
-      {
-        id: "1",
-        role: "user" as const,
-        content: "Hello",
-        timestamp: Date.now(),
-      },
-    ];
-    setupMockState({ messages, clearMessages });
+    setupMockState({ clearMessages });
 
     render(<Page />);
 
@@ -105,22 +97,12 @@ describe("Chat Page", () => {
     expect(clearMessages).toHaveBeenCalledTimes(1);
   });
 
-  it("clear chat button is not shown when there are no messages", () => {
-    setupMockState({ messages: [] });
-
-    render(<Page />);
-
-    expect(
-      screen.queryByRole("button", { name: /clear chat/i }),
-    ).not.toBeInTheDocument();
-  });
-
   it("loading state disables chat input", () => {
     setupMockState({ isLoading: true });
 
     render(<Page />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     expect(textarea).toBeDisabled();
   });
 
@@ -158,26 +140,7 @@ describe("Chat Page", () => {
 
     const messageEls = screen.getAllByTestId("chat-message");
     expect(messageEls).toHaveLength(2);
-    // MarkdownRenderer should convert **bold** to <strong>
     expect(screen.getByText("bold")).toBeInTheDocument();
-  });
-
-  it("clear chat button is not shown when there are only system messages", () => {
-    const messages = [
-      {
-        id: "1",
-        role: "system" as const,
-        content: "System message",
-        timestamp: Date.now(),
-      },
-    ];
-    setupMockState({ messages });
-
-    render(<Page />);
-
-    expect(
-      screen.queryByRole("button", { name: /clear chat/i }),
-    ).not.toBeInTheDocument();
   });
 
   it("sends message when user types in ChatInput and presses Enter", async () => {
@@ -186,7 +149,7 @@ describe("Chat Page", () => {
 
     render(<Page />);
 
-    const textarea = screen.getByPlaceholderText(/type a message/i);
+    const textarea = screen.getByPlaceholderText(/请输入/i);
     const user = userEvent.setup();
     await user.type(textarea, "Test from page");
     await user.keyboard("{Enter}");

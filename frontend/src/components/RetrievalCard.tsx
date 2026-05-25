@@ -19,41 +19,43 @@ export default function RetrievalCard({ chunks }: RetrievalCardProps) {
 
   if (chunks.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-400">
+      <div className="rounded-xl bg-bg-soft px-4 py-3 text-sm text-text-tertiary shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
         无相关内容
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {sorted.map((chunk, i) => (
         <div
           key={i}
-          className="overflow-hidden rounded-lg border border-gray-200 transition-all duration-500"
+          className="rounded-xl bg-bg-soft px-[18px] py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
         >
-          <div className="flex w-full items-center gap-2 bg-white px-3 py-2 text-left text-sm">
-            <span className="shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">
+          <div className="flex items-center gap-2.5">
+            <span className="shrink-0 rounded bg-brand-light px-1.5 py-0.5 text-xs font-medium text-brand">
               {chunk.source}
             </span>
             {chunk.score !== undefined ? (
-              <span className="shrink-0 text-xs font-semibold text-blue-600">
+              <span className="shrink-0 text-xs font-semibold text-brand">
                 score: {chunk.score}
               </span>
             ) : (
-              <span className="shrink-0 animate-pulse text-xs text-gray-400">
+              <span className="shrink-0 animate-pulse text-xs text-text-tertiary">
                 评分中...
               </span>
             )}
-            <span className="line-clamp-1 min-w-0 flex-1 text-gray-500">
-              {chunk.preview.slice(0, 60)}...
-            </span>
+          </div>
+          <div className="mt-2 text-sm leading-relaxed text-text-body line-clamp-1">
+            {chunk.preview.slice(0, 60)}...
+          </div>
+          <div className="mt-2">
             {chunk.score !== undefined && (
               <button
                 onClick={() => setModalIndex(i)}
-                className="shrink-0 text-xs text-blue-500 hover:text-blue-700"
+                className="text-xs font-medium text-brand hover:text-orange-700"
               >
-                详情
+                详情 →
               </button>
             )}
           </div>
