@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatMessage, SSEPayload, RetrievalMode, RetrievalSettings } from "@/types/chat";
 
 function generateId(): string {
@@ -30,12 +30,16 @@ export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>(
-    () => loadStorage<RetrievalMode>(STORAGE_KEY_MODE, "auto"),
-  );
-  const [settings, setSettings] = useState<RetrievalSettings>(
-    () => loadStorage<RetrievalSettings>(STORAGE_KEY_SETTINGS, DEFAULT_SETTINGS),
-  );
+  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("auto");
+  const [settings, setSettings] = useState<RetrievalSettings>(DEFAULT_SETTINGS);
+
+  // Sync from localStorage after hydration to avoid SSR mismatch
+  useEffect(() => {
+    const storedMode = loadStorage<RetrievalMode>(STORAGE_KEY_MODE, "auto");
+    if (storedMode !== "auto") setRetrievalMode(storedMode);
+    const storedSettings = loadStorage<RetrievalSettings>(STORAGE_KEY_SETTINGS, DEFAULT_SETTINGS);
+    if (storedSettings !== DEFAULT_SETTINGS) setSettings(storedSettings);
+  }, []);
 
   const isLoadingRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
