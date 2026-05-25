@@ -63,4 +63,25 @@ class TestChatRequest:
         )
         assert len(req.messages) == 2
 
+    def test_request_with_retrieval_mode(self):
+        req = ChatRequest(
+            messages=[ChatMessage(role="user", content="Hello")],
+            retrieval_mode="manual",
+            settings={"top_k_manual": 6, "top_k_forum": 6, "top_k_scored": 3},
+        )
+        assert req.retrieval_mode == "manual"
+        assert req.settings["top_k_manual"] == 6
+
+    def test_request_default_retrieval_mode(self):
+        req = ChatRequest(messages=[ChatMessage(role="user", content="Hello")])
+        assert req.retrieval_mode == "auto"
+        assert req.settings is None
+
+    def test_request_invalid_retrieval_mode_rejected(self):
+        with pytest.raises(ValidationError):
+            ChatRequest(
+                messages=[ChatMessage(role="user", content="Hello")],
+                retrieval_mode="invalid",
+            )
+
 

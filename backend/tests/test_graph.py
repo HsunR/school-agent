@@ -281,6 +281,86 @@ class TestAnswerNode:
         assert len(result["messages"]) >= 1
 
 
+class TestRetrievalModeOverride:
+    """Graph should respect retrieval_mode from state."""
+
+    @pytest.mark.asyncio
+    async def test_manual_mode_sets_search_manual_true(self, mock_chroma):
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
+
+        result = await graph.ainvoke({
+            "messages": [HumanMessage(content="Hello")],
+            "retrieval_mode": "manual",
+            "settings": {},
+        })
+        assert result.get("search_manual") is True
+        assert result.get("search_forum") is False
+
+    @pytest.mark.asyncio
+    async def test_forum_mode_sets_search_forum_true(self, mock_chroma):
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
+
+        result = await graph.ainvoke({
+            "messages": [HumanMessage(content="Hello")],
+            "retrieval_mode": "forum",
+            "settings": {},
+        })
+        assert result.get("search_manual") is False
+        assert result.get("search_forum") is True
+
+    @pytest.mark.asyncio
+    async def test_both_mode_sets_both_true(self, mock_chroma):
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
+
+        result = await graph.ainvoke({
+            "messages": [HumanMessage(content="Hello")],
+            "retrieval_mode": "both",
+            "settings": {},
+        })
+        assert result.get("search_manual") is True
+        assert result.get("search_forum") is True
+
+    @pytest.mark.asyncio
+    async def test_none_mode_sets_both_false(self, mock_chroma):
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
+
+        result = await graph.ainvoke({
+            "messages": [HumanMessage(content="Hello")],
+            "retrieval_mode": "none",
+            "settings": {},
+        })
+        assert result.get("search_manual") is False
+        assert result.get("search_forum") is False
+
+    @pytest.mark.asyncio
+    async def test_auto_mode_still_uses_llm(self, mock_chroma):
+        """Auto mode should still use LLM and produce search_manual=False for greetings."""
+        routing_llm = MockStreamingChatModel()
+        routing_llm.streaming = False
+        chat_llm = MockStreamingChatModel()
+        graph = compile_graph(routing_llm, routing_llm, mock_chroma, chat_llm, routing_llm)
+
+        result = await graph.ainvoke({
+            "messages": [HumanMessage(content="你好")],
+            "retrieval_mode": "auto",
+            "settings": {},
+        })
+        # Mock LLM will fail JSON parse, falling back to search_manual=False
+        assert result.get("search_manual") is False
+
+
 async def _async_gen(items):
     """Helper: async generator yielding items."""
     for item in items:
