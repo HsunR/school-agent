@@ -377,7 +377,9 @@ def manual_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     query = state.get("search_query_manual") or ""
     if not query:
         return {"manual_chunks": [], "search_manual": False}
-    chunks = chroma.retrieve(COLLECTION_MANUAL, query)
+    settings = state.get("settings", {})
+    top_k = settings.get("top_k_manual") if settings else None
+    chunks = chroma.retrieve(COLLECTION_MANUAL, query, top_k=top_k)
     logger.info("Manual retrieval: %d chunks", len(chunks))
     previews = [{"preview": c, "source": SOURCE_MANUAL_LABEL} for c in chunks]
     writer({
@@ -397,7 +399,9 @@ def forum_retrieval_node(state: ChatState, chroma: ChromaManager) -> dict:
     query = state.get("search_query_forum") or ""
     if not query:
         return {"forum_chunks": [], "search_forum": False}
-    chunks = chroma.retrieve(COLLECTION_FORUM, query)
+    settings = state.get("settings", {})
+    top_k = settings.get("top_k_forum") if settings else None
+    chunks = chroma.retrieve(COLLECTION_FORUM, query, top_k=top_k)
     logger.info("Forum retrieval: %d chunks", len(chunks))
     previews = [{"preview": c, "source": SOURCE_FORUM_LABEL} for c in chunks]
     writer({
@@ -479,9 +483,11 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
 
 
 
-async def answer_node(state: ChatState, chat_llm: BaseChatModel, top_k_scored: int = 3) -> dict:
+async def answer_node(state: ChatState, chat_llm: BaseChatModel) -> dict:
     """Generate the final answer using optimized query, compressed context, and retrieved context."""
     writer = get_stream_writer()
+    settings = state.get("settings", {})
+    top_k_scored = settings.get("top_k_scored", 3) if settings else 3
     scored = state.get("scored_chunks", [])
     manual_chunks = state.get("manual_chunks", [])
     forum_chunks = state.get("forum_chunks", [])
@@ -586,7 +592,7 @@ def compile_graph(
     builder.add_node("scoring_node", lambda state: scoring_node(state, scoring_llm))
 
     async def _answer_node(state):
-        return await answer_node(state, chat_llm, top_k_scored)
+        return await answer_node(state, chat_llm)
 
     builder.add_node("answer_node", _answer_node)
 
