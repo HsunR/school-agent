@@ -404,4 +404,45 @@ describe("useChat", () => {
     const body = JSON.parse(lastCall[1].body);
     expect(body.messages.length).toBe(7);
   });
+
+  it("should include retrieval_mode and settings in POST body", async () => {
+    const stream = createSSEStream('data: {"type":"token","token":"","done":true}\n\n');
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true, body: stream,
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage("Hello");
+    });
+
+    const body = JSON.parse(
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
+    );
+    expect(body.retrieval_mode).toBe("auto");
+    expect(body.settings).toEqual({ top_k_manual: 6, top_k_forum: 6, top_k_scored: 3 });
+  });
+
+  it("should update retrievalMode state when setRetrievalMode is called", () => {
+    const { result } = renderHook(() => useChat());
+
+    act(() => {
+      result.current.setRetrievalMode("manual");
+    });
+
+    expect(result.current.retrievalMode).toBe("manual");
+  });
+
+  it("should update settings state when setSettings is called", () => {
+    const { result } = renderHook(() => useChat());
+
+    act(() => {
+      result.current.setSettings({ top_k_manual: 8, top_k_forum: 4, top_k_scored: 5 });
+    });
+
+    expect(result.current.settings.top_k_manual).toBe(8);
+    expect(result.current.settings.top_k_forum).toBe(4);
+    expect(result.current.settings.top_k_scored).toBe(5);
+  });
 });
