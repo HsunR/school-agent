@@ -328,6 +328,8 @@ async def test_answer_node_falls_back_to_raw_chunks_when_all_scores_zero(mock_wr
         "scored_chunks": [
             {"original": "宿舍管理费每学期500元", "source": "学生手册", "score": 0},
         ],
+        "retrieval_mode": "auto",
+        "settings": {},
     }
     result = await answer_node(state, chat_llm)
     assert "messages" in result
@@ -364,8 +366,10 @@ async def test_answer_node_uses_top_k_scored_chunks(mock_writer):
             {"original": "帖B", "source": "学校贴吧", "score": 20},
             {"original": "帖D", "source": "学校贴吧", "score": 60},
         ],
+        "retrieval_mode": "auto",
+        "settings": {"top_k_scored": 2},
     }
-    result = await answer_node(state, chat_llm, top_k_scored=2)
+    result = await answer_node(state, chat_llm)
     assert "messages" in result
     assert captured, "No HumanMessage captured"
     # top 2 by score: 帖A(90) and 帖C(80) — injected into HumanMessage
