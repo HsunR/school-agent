@@ -109,7 +109,7 @@ SCORING_SYSTEM_PROMPT = (
     "当前系统是「广师大助手」，所属广东技术师范大学，你是系统的评分节点，。\n"
     "你是一个校园助手的内容过滤器。你的任务是判断给定的资料文本是否与用户问题相关。\n\n"
     "【评分标准】\n"
-    "100分：资料完全回答了用户问题，包含所有必要信息。\ "  # 注意转义
+    "100分：资料完全回答了用户问题，包含所有必要信息。\n"
     "75-99分：资料与问题高度相关，能回答大部分内容，但可能缺少部分细节。\n"
     "50-74分：资料部分相关，只能间接或局部回答用户问题。\n"
     "1-49分：资料仅提及相关术语但实际不解决问题，或相关性很弱。\n"
@@ -458,7 +458,10 @@ def scoring_node(state: ChatState, scoring_llm: BaseChatModel) -> dict:
             expected_format='{"score": 整数}',
         )
         if parsed:
-            score = max(0, min(100, int(parsed.get("score", 0))))
+            try:
+                score = max(0, min(100, int(parsed.get("score", 0))))
+            except (ValueError, TypeError):
+                score = 0
             logger.info("Scored %s chunk %d: score=%d",
                         source_key, idx, score)
         else:
