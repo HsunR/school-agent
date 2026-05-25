@@ -445,4 +445,24 @@ describe("useChat", () => {
     expect(result.current.settings.top_k_forum).toBe(4);
     expect(result.current.settings.top_k_scored).toBe(5);
   });
+
+  it("should store selectedChunks from context_selected event", async () => {
+    const stream = createSSEStream(
+      'data: {"type":"context_selected","selected":[{"source":"学生手册","preview":"旷课处分规定"}]}\n\n',
+      'data: {"type":"token","token":"","done":true}\n\n',
+    );
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true, body: stream,
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage("test");
+    });
+
+    expect(result.current.selectedChunks).toEqual([
+      { source: "学生手册", preview: "旷课处分规定" },
+    ]);
+  });
 });

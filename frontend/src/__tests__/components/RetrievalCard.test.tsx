@@ -35,3 +35,32 @@ describe("RetrievalCard", () => {
     expect(screen.getByText("评分中...")).toBeInTheDocument();
   });
 });
+
+describe("RetrievalCard selected chunks", () => {
+  const chunks = [
+    { preview: "宿舍管理费每学期500元", source: "学校贴吧", score: 90 },
+    { preview: "食堂推荐窗口", source: "学校贴吧", score: 30 },
+  ];
+
+  it("renders green highlight for selected chunks", () => {
+    render(<RetrievalCard chunks={chunks} selectedChunks={[{ source: "学校贴吧", preview: "宿舍管理费每学期500元" }]} />);
+    const labels = screen.getAllByText("✓ 已用于回答");
+    expect(labels).toHaveLength(1);
+  });
+
+  it("renders no highlight when selectedChunks is empty", () => {
+    render(<RetrievalCard chunks={chunks} selectedChunks={[]} />);
+    expect(screen.queryByText("✓ 已用于回答")).toBeNull();
+  });
+
+  it("renders no highlight when no match", () => {
+    render(<RetrievalCard chunks={chunks} selectedChunks={[{ source: "学校贴吧", preview: "nonexistent" }]} />);
+    expect(screen.queryByText("✓ 已用于回答")).toBeNull();
+  });
+
+  it("highlights only the matching chunk", () => {
+    render(<RetrievalCard chunks={chunks} selectedChunks={[{ source: "学校贴吧", preview: "食堂推荐窗口" }]} />);
+    const labels = screen.getAllByText("✓ 已用于回答");
+    expect(labels).toHaveLength(1);
+  });
+});
