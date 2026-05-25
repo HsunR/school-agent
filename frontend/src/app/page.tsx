@@ -17,6 +17,7 @@ export default function Home() {
     setRetrievalMode,
     settings,
     setSettings,
+    selectedChunks,
   } = useChat();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -115,7 +116,7 @@ export default function Home() {
           />
 
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
+            <ChatMessage key={msg.id} message={msg} selectedChunks={selectedChunks} />
           ))}
           <div ref={bottomRef} />
         </div>

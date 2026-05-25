@@ -1,11 +1,13 @@
 "use client";
 
-import type { ChatMessage as ChatMessageType } from "@/types/chat";
+import { useState } from "react";
+import type { ChatMessage as ChatMessageType, SelectedChunk } from "@/types/chat";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import RetrievalCard from "@/components/RetrievalCard";
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  selectedChunks?: SelectedChunk[];
 }
 
 function BentoCard({
@@ -51,7 +53,7 @@ function Heading({
   );
 }
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({ message, selectedChunks = [] }: ChatMessageProps) {
   const isUser = message.role === "user";
   const timestamp = new Date(message.timestamp).toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -106,14 +108,36 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   }
 
   if (message.role === "retrieval") {
+    const [expanded, setExpanded] = useState(false);
     return (
       <div data-testid="chat-message">
-        <BentoCard className="flex flex-col gap-3.5">
-          <span className="font-display text-base font-semibold text-black">
-            📄 {message.content}
-          </span>
-          {message.chunks && <RetrievalCard chunks={message.chunks} />}
-        </BentoCard>
+        <div className="rounded-2xl bg-bg-card p-6">
+          <div className="flex flex-col gap-3.5">
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="font-display text-base font-semibold text-black">
+                📄 {message.content}
+              </span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className={`h-4 w-4 text-text-tertiary transition-transform ${expanded ? "rotate-180" : ""}`}
+              >
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {expanded && message.chunks && (
+              <RetrievalCard
+                chunks={message.chunks}
+                selectedChunks={selectedChunks}
+              />
+            )}
+          </div>
+        </div>
       </div>
     );
   }
