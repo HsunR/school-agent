@@ -26,6 +26,7 @@ async def event_generator(
     messages: list,  # noqa: ANN401 — FastAPI dependency injection
     retrieval_mode: str = "auto",
     settings: dict | None = None,
+    skip_intent: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Yield SSE-formatted events from the chat service.
 
@@ -40,7 +41,7 @@ async def event_generator(
         chat_service = ChatService(get_settings())
 
     try:
-        async for event_str in chat_service.stream_chat(messages, retrieval_mode, settings):
+        async for event_str in chat_service.stream_chat(messages, retrieval_mode, settings, skip_intent):
             yield f"data: {event_str}\n\n"
     except Exception:
         logger.exception("Error during SSE stream")
@@ -70,7 +71,7 @@ async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
         data: {"type":"error","error":"...","done":true}\n\n
     """
     return StreamingResponse(
-        event_generator(request.messages, request.retrieval_mode, request.settings),
+        event_generator(request.messages, request.retrieval_mode, request.settings, request.skip_intent),
         media_type="text/event-stream",
     )
 

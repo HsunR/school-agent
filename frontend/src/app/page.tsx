@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useChat } from "@/hooks/useChat";
 import ChatInput from "@/components/ChatInput";
 import ChatMessage from "@/components/ChatMessage";
@@ -18,13 +18,20 @@ export default function Home() {
     settings,
     setSettings,
     selectedChunks,
+    skipIntent,
+    setSkipIntent,
   } = useChat();
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -103,17 +110,19 @@ export default function Home() {
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 pb-6">
         <div className="mx-auto flex max-w-[700px] flex-col gap-3">
-          {/* Welcome message */}
-          <ChatMessage
-            message={{
-              id: "welcome",
-              role: "assistant",
-              content:
-                "你好呀！我是广师助手 🤗 有什么想问的尽管说——学习、生活、校园资讯，我都可以帮提供建议和意见",
-              timestamp: Date.now(),
-              isStreaming: false,
-            }}
-          />
+          {/* Welcome message (mounted guard avoids hydration mismatch on timestamp) */}
+          {mounted && (
+            <ChatMessage
+              message={{
+                id: "welcome",
+                role: "assistant",
+                content:
+                  "你好呀！我是广师助手 🤗 有什么想问的尽管说——学习、生活、校园资讯，我都可以帮提供建议和意见",
+                timestamp: Date.now(),
+                isStreaming: false,
+              }}
+            />
+          )}
 
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} selectedChunks={selectedChunks} />
@@ -130,6 +139,8 @@ export default function Home() {
         onRetrievalModeChange={setRetrievalMode}
         settings={settings}
         onSettingsChange={setSettings}
+        skipIntent={skipIntent}
+        onSkipIntentChange={setSkipIntent}
       />
     </div>
   );

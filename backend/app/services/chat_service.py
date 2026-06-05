@@ -103,6 +103,7 @@ class ChatService:
         messages: list[ChatMessage],
         retrieval_mode: str = "auto",
         settings: dict | None = None,
+        skip_intent: bool = False,
     ) -> AsyncGenerator[str, Any]:
         """Stream a chat response with SSE-typed events via graph.astream(custom)."""
         langchain_messages = self._to_langchain(messages)
@@ -121,6 +122,7 @@ class ChatService:
             "compressed_context": "",
             "retrieval_mode": retrieval_mode,
             "settings": resolved_settings,
+            "skip_intent": skip_intent,
         }
 
         try:

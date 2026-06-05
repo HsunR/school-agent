@@ -11,6 +11,8 @@ const defaultProps = {
   onRetrievalModeChange: vi.fn(),
   settings: { top_k_manual: 6, top_k_forum: 6, top_k_scored: 3 },
   onSettingsChange: vi.fn(),
+  skipIntent: false,
+  onSkipIntentChange: vi.fn(),
 };
 
 afterEach(() => {

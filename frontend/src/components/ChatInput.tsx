@@ -18,6 +18,8 @@ interface ChatInputProps {
   onRetrievalModeChange: (mode: RetrievalMode) => void;
   settings: RetrievalSettings;
   onSettingsChange: (settings: RetrievalSettings) => void;
+  skipIntent: boolean;
+  onSkipIntentChange: (value: boolean) => void;
 }
 
 export default function ChatInput({
@@ -27,6 +29,8 @@ export default function ChatInput({
   onRetrievalModeChange,
   settings,
   onSettingsChange,
+  skipIntent,
+  onSkipIntentChange,
 }: ChatInputProps) {
   const [text, setText] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -100,10 +104,24 @@ export default function ChatInput({
               {opt.label}
             </button>
           ))}
+          {/* ── Intent toggle ── */}
+          <button
+            type="button"
+            onClick={() => onSkipIntentChange(!skipIntent)}
+            className={`ml-auto flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+              skipIntent
+                ? "bg-red-100 text-red-600"
+                : "bg-green-100 text-green-600"
+            }`}
+            aria-label="Toggle intent recognition"
+          >
+            <span className={`h-2 w-2 rounded-full ${skipIntent ? "bg-red-500" : "bg-green-500"}`} />
+            {skipIntent ? "关闭意图" : "开启意图"}
+          </button>
           <button
             type="button"
             onClick={() => setShowSettings((prev) => !prev)}
-            className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-bg-soft hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-bg-soft hover:text-foreground"
             aria-label="Settings"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">

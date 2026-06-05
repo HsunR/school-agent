@@ -9,6 +9,7 @@ function generateId(): string {
 
 const STORAGE_KEY_MODE = "retrieval_mode";
 const STORAGE_KEY_SETTINGS = "retrieval_settings";
+const STORAGE_KEY_SKIP_INTENT = "skip_intent";
 
 const DEFAULT_SETTINGS: RetrievalSettings = {
   top_k_manual: 6,
@@ -32,6 +33,7 @@ export function useChat() {
   const [error, setError] = useState<string | null>(null);
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("auto");
   const [settings, setSettings] = useState<RetrievalSettings>(DEFAULT_SETTINGS);
+  const [skipIntent, setSkipIntent] = useState(false);
 
   const [selectedChunks, setSelectedChunks] = useState<SelectedChunk[]>([]);
   const selectedChunksRef = useRef<SelectedChunk[]>(selectedChunks);
@@ -43,18 +45,22 @@ export function useChat() {
     if (storedMode !== "auto") setRetrievalMode(storedMode);
     const storedSettings = loadStorage<RetrievalSettings>(STORAGE_KEY_SETTINGS, DEFAULT_SETTINGS);
     if (storedSettings !== DEFAULT_SETTINGS) setSettings(storedSettings);
+    const storedSkipIntent = loadStorage<boolean>(STORAGE_KEY_SKIP_INTENT, false);
+    if (storedSkipIntent) setSkipIntent(true);
   }, []);
 
   const isLoadingRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   const retrievalModeRef = useRef<RetrievalMode>(retrievalMode);
   const settingsRef = useRef<RetrievalSettings>(settings);
+  const skipIntentRef = useRef(skipIntent);
 
   // Keep refs in sync with current state
   messagesRef.current = messages;
   isLoadingRef.current = isLoading;
   retrievalModeRef.current = retrievalMode;
   settingsRef.current = settings;
+  skipIntentRef.current = skipIntent;
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim();
@@ -97,6 +103,7 @@ export function useChat() {
           messages: [...historyMessages, userMessage],
           retrieval_mode: retrievalModeRef.current,
           settings: settingsRef.current,
+          skip_intent: skipIntentRef.current,
         }),
       });
 
@@ -276,6 +283,11 @@ export function useChat() {
     try { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(s)); } catch {}
   }, []);
 
+  const setSkipIntentAndPersist = useCallback((value: boolean) => {
+    setSkipIntent(value);
+    try { localStorage.setItem(STORAGE_KEY_SKIP_INTENT, JSON.stringify(value)); } catch {}
+  }, []);
+
   return {
     messages,
     isLoading,
@@ -288,5 +300,7 @@ export function useChat() {
     settings,
     setSettings: setSettingsAndPersist,
     selectedChunks,
+    skipIntent,
+    setSkipIntent: setSkipIntentAndPersist,
   };
 }

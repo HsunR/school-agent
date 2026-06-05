@@ -186,6 +186,7 @@ class ChatState(TypedDict):
     compressed_context: str
     retrieval_mode: str
     settings: dict
+    skip_intent: bool
 
 
 # ── Nodes ──
@@ -263,6 +264,18 @@ def _format_history(messages: Sequence[BaseMessage]) -> str:
 def intent_node(state: ChatState, intent_llm: BaseChatModel) -> dict:
     writer = get_stream_writer()
     last_msg = state["messages"][-1].content if state["messages"] else ""
+
+    if state.get("skip_intent"):
+        optimized_query = last_msg
+        compressed_context = ""
+        writer({
+            "type": "intent",
+            "optimized_query": optimized_query,
+            "compressed_context": compressed_context,
+            "label": "已跳过意图识别（原样传递）",
+        })
+        return {"optimized_query": optimized_query, "compressed_context": compressed_context}
+
     history_msgs = list(state["messages"][:-1])
     formatted_history = _format_history(history_msgs)
     user_text = (
